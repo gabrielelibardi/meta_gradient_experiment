@@ -71,21 +71,14 @@ class PPO():
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch = sample
 
-                # Generate intrinsic rewards
-                int_rewards, int_values = self.actor_critic.predict_intrinsic(obs_batch, actions_batch)
-
                 ###############################################################
 
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
-                # Only internal returns
-                mix_return_batch = int_rewards  # + return_batch
-                mix_values = int_values  # + values
-
                 # Compute  mixed advantage
-                adv_targ = mix_return_batch - value_preds_batch
+                adv_targ = return_batch - value_preds_batch
                 adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
 
                 # Compute normal action loss
@@ -95,7 +88,7 @@ class PPO():
                 action_loss = - torch.min(surr1, surr2).mean()
 
                 # Compute normal value loss
-                value_loss = 0.5 * (mix_return_batch - mix_values).pow(2).mean()
+                value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                 # Compute normal loss
                 loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
@@ -173,21 +166,26 @@ class MetaPPO():
 
     def update(self, rollouts):
 
+        advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
+
+        advantages_intrinsic = rollouts.returns_intrinsic[:-1] - rollouts.value_preds_intrinsic[:-1]
+        advantages_intrinsic = (advantages_intrinsic - advantages_intrinsic.mean()) / (advantages_intrinsic.std() + 1e-5)
+
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
 
         for e in range(self.ppo_epoch):
 
-            if self.actor_critic.is_recurrent:
-                data_generator = rollouts.recurrent_generator(self.num_mini_batch)
-            else:
-                data_generator = rollouts.feed_forward_generator(self.num_mini_batch)
+            data_generator = rollouts.feed_forward_generator(
+                advantages, advantages_intrinsic, self.num_mini_batch)
 
             for sample in data_generator:
 
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch = sample
+                value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
+                adv_targ, adv_targ_int = sample
 
                 # Generate intrinsic rewards
                 int_rewards, int_values = self.actor_critic.predict_intrinsic(obs_batch, actions_batch)
@@ -201,15 +199,12 @@ class MetaPPO():
                 # Only internal returns
                 mix_return_batch = int_rewards  # + return_batch
                 mix_values = int_values  # + values
-
-                # Compute  mixed advantage
-                adv_targ = mix_return_batch - value_preds_batch
-                adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
+                mix_adv = adv_targ_int # * 0.5 + 0.5 adv_targ ?
 
                 # Compute normal action loss
                 ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
-                surr1 = ratio * adv_targ
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+                surr1 = ratio * mix_adv
+                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * mix_adv
                 action_loss = - torch.min(surr1, surr2).mean()
 
                 # Compute normal value loss
@@ -235,9 +230,7 @@ class MetaPPO():
 
                 ext_return_batch = return_batch
                 ext_values = values
-
-                adv_targ = return_batch - (value_preds_batch - int_rewards.detach())
-                adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
+                ext_adv = adv_targ
 
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
@@ -245,8 +238,8 @@ class MetaPPO():
 
                 # Compute meta action loss
                 ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
-                surr1 = ratio * adv_targ
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+                surr1 = ratio * ext_adv
+                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * ext_adv
                 meta_action_loss = - torch.min(surr1, surr2).mean()
 
                 # Compute meta value loss
@@ -294,6 +287,15 @@ def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda, use_pr
             rollouts.masks[-1]).detach()
 
     rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
+
+    with torch.no_grad():
+        int_rewards, int_values = actor_critic.predict_intrinsic(rollouts.obs[:-1], rollouts.actions)
+        rollouts.rewards_intrinsic[:-1].copy_(int_rewards)
+        rollouts.values_intrinsic[:-1].copy_(int_values)
+        next_int_value = actor_critic.meta_net.meta_critic(rollouts.obs[-1])
+
+    rollouts.compute_returns_intrinsic(next_int_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
+
     value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts)
     rollouts.after_update()
 
