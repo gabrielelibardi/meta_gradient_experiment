@@ -103,7 +103,7 @@ class MetaPolicy(nn.Module):
         return int_rews, int_vals
 
 
-class PolicyMLP:
+class PolicyMLP(nn.Module):
     def __init__(self, num_inputs, hidden_size=64):
         super(PolicyMLP, self).__init__()
 
@@ -129,7 +129,7 @@ class PolicyMLP:
         return self.critic_linear(hidden_critic), hidden_actor
 
 
-class MetaMLP:
+class MetaMLP(nn.Module):
     def __init__(self, num_obs_inputs, num_act_inputs, hidden_size=64):
         super(MetaMLP, self).__init__()
 

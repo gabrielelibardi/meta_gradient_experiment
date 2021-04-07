@@ -149,7 +149,6 @@ def get_args():
         help='which of the pybullet task')
     args = parser.parse_args()
     args.log_dir = os.path.expanduser(args.log_dir)
-    args.state = args.cnn == 'State'
     return args
 
 

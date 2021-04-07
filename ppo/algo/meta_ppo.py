@@ -157,40 +157,6 @@ class MetaPPO():
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
 
 
-    def sample_update(self, sample):
-
-        # this is the computation of the ppo loss, which is common to both the in_sample and ex_sample
-
-        obs_batch, recurrent_hidden_states_batch, actions_batch, \
-            value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
-                adv_targ = sample
-
-        # Reshape to do in a single forward pass for all steps
-        values, action_log_probs, dist_entropy, _, dist_a = self.actor_critic.evaluate_actions(
-            obs_batch, recurrent_hidden_states_batch, masks_batch,actions_batch)
-
-        ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
-        surr1 = ratio * adv_targ
-        surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-        action_loss = -torch.min(surr1, surr2).mean()
-
-        if self.use_clipped_value_loss:
-            value_pred_clipped = value_preds_batch + \
-                (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
-            value_losses = (values - return_batch).pow(2)
-            value_losses_clipped = (
-                value_pred_clipped - return_batch).pow(2)
-            value_loss = 0.5 * torch.max(value_losses, value_losses_clipped).mean()
-        else:
-            value_loss = 0.5 * (return_batch - values).pow(2).mean()
-
-        loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
-
-        loss.backward(retain_graph=True)
-        nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
-
-        return value_loss, action_loss, dist_entropy
-
     def update(self, in_rollouts, ex_rollouts):
         # Advantages are computed for both rollouts and are kept separate
         in_advantages = in_rollouts.returns[:-1] - in_rollouts.value_preds[:-1]
@@ -249,6 +215,7 @@ class MetaPPO():
 
 
 def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
+
     for step in range(num_steps):
         # Sample actions
         with torch.no_grad():
@@ -256,32 +223,25 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
                 rollouts.get_obs(step), rollouts.recurrent_hidden_states[step],rollouts.masks[step], deterministic = det)
 
         # Obser reward and next obs
-#         action = action * 0
         obs, reward, done, infos = envs.step(action)
 
         # If done then clean the history of observations.
         masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
         bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
 
-        rollouts.insert(obs, recurrent_hidden_states, action,
-                        action_log_prob, value, reward, masks, bad_masks)
+        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, bad_masks)
 
 
-def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda, use_proper_time_limits, rew_func):
+def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda, use_proper_time_limits):
+
     with torch.no_grad():
         next_value = actor_critic.get_value(rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1],
             rollouts.masks[-1]).detach()
 
-    # create 2 rollouts one for the intrinsic rewards, the other for the extrinsic rewards
-    # later we can make it more efficient, for state-input envs it makes almost no difference
     rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
-    # create intrinisc reward rollout and compute returns
-    in_rollouts = agent.change_reward(rollouts)
-    in_rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
-    # the update uses both rollouts
-    value_loss, action_loss, dist_entropy, kl_div, loss = agent.update(in_rollouts, rollouts)
+    value_loss, action_loss, dist_entropy, kl_div, loss = agent.update(rollouts)
     rollouts.after_update()
-    in_rollouts.after_update()
+
     return value_loss, action_loss, dist_entropy, kl_div, loss
 
 
