@@ -98,6 +98,7 @@ class MetaPPO():
                 # Compute normal value loss
                 value_loss = 0.5 * (mix_return_batch - mix_values).pow(2).mean()
 
+                # Compute normal loss
                 loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
 
                 # Clean grads from previous iteration in both optimizers
@@ -129,12 +130,13 @@ class MetaPPO():
                 ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
                 surr1 = ratio * adv_targ
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-                action_loss = - torch.min(surr1, surr2).mean()
+                meta_action_loss = - torch.min(surr1, surr2).mean()
 
                 # Compute meta value loss
-                value_loss = 0.5 * (ext_return_batch - ext_values).pow(2).mean()
+                meta_value_loss = 0.5 * (ext_return_batch - ext_values).pow(2).mean()
 
-                meta_loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
+                # Compute meta loss
+                meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss - dist_entropy * self.entropy_coef
 
                 # Meta backward pass
                 meta_loss.backward()
@@ -147,7 +149,7 @@ class MetaPPO():
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, loss
+        return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
 
 
 def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
@@ -175,10 +177,10 @@ def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda, use_pr
             rollouts.masks[-1]).detach()
 
     rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
-    value_loss, action_loss, dist_entropy, loss = agent.update(rollouts)
+    value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts)
     rollouts.after_update()
 
-    return value_loss, action_loss, dist_entropy, loss
+    return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
 
 
 def ppo_save_model(actor_critic, fname, iter):

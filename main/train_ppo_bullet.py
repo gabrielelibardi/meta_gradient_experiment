@@ -54,7 +54,7 @@ def main():
 
         ppo_rollout(args.num_steps, envs, actor_critic, rollouts)
 
-        value_loss, action_loss, dist_entropy, loss = ppo_update(
+        value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = ppo_update(
             agent, actor_critic, rollouts, args.use_gae, args.gamma, args.gae_lambda, args.use_proper_time_limits)
 
         if (j % args.save_interval == 0 or j == num_updates - 1) and args.log_dir != "":
@@ -64,8 +64,8 @@ def main():
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             s = "Update {}, num timesteps {}, FPS {} \n".format(
                 j, total_num_steps, int(total_num_steps / (time.time() - start)))
-            s += "Loss {}, Entropy {}, value_loss {}, action_loss {}".format(
-                loss, dist_entropy, value_loss, action_loss)
+            s += "Loss {}, meta loss {}, value_loss {}, meta_value_loss {}, action_loss {}, meta action loss {}".format(
+                loss, meta_loss, value_loss, meta_value_loss, action_loss, meta_action_loss)
             print(s, flush=True)
 
 
