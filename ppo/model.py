@@ -46,7 +46,10 @@ class MetaPolicy(nn.Module):
         #                             META NET                                #
         #######################################################################
 
-        self.meta_net = MetaMLP(obs_shape[0], act_shape[0])
+        self.meta_net = MetaMLP(
+            obs_shape[0],
+            1, #act_shape[0]
+            )
 
     @property
     def is_recurrent(self):
@@ -62,7 +65,7 @@ class MetaPolicy(nn.Module):
 
     def act(self, inputs, rnn_hxs, masks, deterministic=False):
 
-        value, actor_features, rnn_hxs = self.base(inputs)
+        value, actor_features = self.base(inputs)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -76,12 +79,12 @@ class MetaPolicy(nn.Module):
         return value, action, action_log_probs, rnn_hxs, dist_entropy
 
     def get_value(self, inputs, rnn_hxs, masks):
-        value, _, _ = self.base(inputs)
+        value, _ = self.base(inputs)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
 
-        value, actor_features, rnn_hxs = self.base(inputs)
+        value, actor_features = self.base(inputs)
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
@@ -91,7 +94,7 @@ class MetaPolicy(nn.Module):
 
     def actions_prob(self, inputs, rnn_hxs, masks, action):
 
-        value, actor_features, rnn_hxs = self.base(inputs)
+        value, actor_features = self.base(inputs)
         dist = self.dist(actor_features)
         action_probs = dist.probs
         return action_probs

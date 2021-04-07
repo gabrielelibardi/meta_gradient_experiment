@@ -33,7 +33,7 @@ class MetaPPO():
         self.use_clipped_value_loss = use_clipped_value_loss
 
         self.optimizer = optim.Adam(actor_critic.policy.parameters(), lr=lr, eps=eps)
-        self.meta_optimizer = optim.Adam(actor_critic.intrinsic_reward_net.parameters(), lr=lr, eps=eps)
+        self.meta_optimizer = optim.Adam(actor_critic.meta_net.parameters(), lr=lr, eps=eps)
 
     def compute_loss(self, action_logp, old_action_logp, adv, values, old_values, returns, dist_entropy):
 
@@ -155,63 +155,6 @@ class MetaPPO():
         dist_entropy_epoch /= num_updates
 
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
-
-
-    def update(self, in_rollouts, ex_rollouts):
-        # Advantages are computed for both rollouts and are kept separate
-        in_advantages = in_rollouts.returns[:-1] - in_rollouts.value_preds[:-1]
-        in_advantages = (in_advantages - in_advantages.mean()) / (in_advantages.std() + 1e-5)
-
-        ex_advantages = ex_rollouts.returns[:-1] - ex_rollouts.value_preds[:-1]
-        ex_advantages = (ex_advantages - ex_advantages.mean()) / (
-            ex_advantages.std() + 1e-5)
-
-        value_loss_epoch = 0
-        action_loss_epoch = 0
-        dist_entropy_epoch = 0
-        kl_div_epoch = 0
-
-        for e in range(self.ppo_epoch):
-            # From the 2 advantages 2 generators are created from which we sample simultaneusly ex_sample and in_sample
-            if self.actor_critic.is_recurrent:
-                data_generator_in = in_rollouts.recurrent_generator(in_advantages, self.num_mini_batch)
-            else:
-                data_generator_in = in_rollouts.feed_forward_generator(in_advantages, self.num_mini_batch)
-
-            if self.actor_critic.is_recurrent:
-                data_generator_ex = ex_rollouts.recurrent_generator(ex_advantages, self.num_mini_batch)
-            else:
-                data_generator_ex = ex_rollouts.feed_forward_generator(ex_advantages, self.num_mini_batch)
-
-            for ex_sample, in_sample in zip(data_generator_ex, data_generator_in):
-
-                self.optimizer.zero_grad()
-                self.meta_optimizer.zero_grad()
-
-                # compute loss first for intrinsic reward then external reward update of eta with meta_optimizer
-                value_loss, action_loss, dist_entropy, kl_div = self.sample_update(in_sample)
-                self.optimizer.step()
-
-                value_loss, action_loss, dist_entropy, kl_div = self.sample_update(ex_sample)
-                self.meta_optimizer.step()
-                #para_tensor = list(self.rew_fun.parameters())
-                #print(para_tensor[0].grad)
-                #print(para_tensor[1].grad)
-
-
-                value_loss_epoch += value_loss.item()
-                action_loss_epoch += action_loss.item()
-                dist_entropy_epoch += dist_entropy.item()
-                kl_div_epoch += kl_div.item()
-
-        num_updates = self.ppo_epoch * self.num_mini_batch
-        value_loss_epoch /= num_updates
-        action_loss_epoch /= num_updates
-        dist_entropy_epoch /= num_updates
-        kl_div_epoch /= num_updates
-        mean_loss = value_loss_epoch * self.value_loss_coef +  action_loss_epoch
-        mean_loss += dist_entropy_epoch*self.entropy_coef if self.actor_behaviors is None else kl_div_epoch*self.entropy_coef
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, kl_div_epoch, mean_loss
 
 
 def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
