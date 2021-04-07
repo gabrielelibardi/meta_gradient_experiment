@@ -185,10 +185,10 @@ class MetaPPO():
 
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
-                adv_targ, adv_targ_int = sample
+                adv_targ, adv_targ_int, value_preds_batch_int, return_batch_int = sample
 
                 # Generate intrinsic rewards
-                int_rewards, int_values = self.actor_critic.predict_intrinsic(obs_batch, actions_batch)
+                _, int_values = self.actor_critic.predict_intrinsic(obs_batch, actions_batch)
 
                 ###############################################################
 
@@ -197,7 +197,7 @@ class MetaPPO():
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
                 # Only internal returns
-                mix_return_batch = int_rewards  # + return_batch
+                mix_return_batch = return_batch_int  # + return_batch
                 mix_values = int_values  # + values
                 mix_adv = adv_targ_int # * 0.5 + 0.5 adv_targ ?
 
@@ -228,13 +228,13 @@ class MetaPPO():
 
                 # META STUFF ##################################################
 
-                ext_return_batch = return_batch
-                ext_values = values
-                ext_adv = adv_targ
-
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
+
+                ext_return_batch = return_batch
+                ext_values = values
+                ext_adv = adv_targ
 
                 # Compute meta action loss
                 ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
