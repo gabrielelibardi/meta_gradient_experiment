@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import argparse
+import numpy as np
 import torch
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
@@ -18,6 +19,7 @@ from bullet.make_pybullet_env import make_pybullet_env
 def main():
     args = get_args()
 
+    np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     torch.set_num_threads(1)
@@ -45,7 +47,7 @@ def main():
 
     obs = envs.reset()
     rollouts = RolloutStorage(args.num_steps, args.num_processes, obs, envs.action_space, actor_critic.recurrent_hidden_state_size)
-    rollouts.to( device)  # they live in GPU, converted to torch from the env wrapper
+    rollouts.to(device)  # they live in GPU, converted to torch from the env wrapper
 
     start = time.time()
     num_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
