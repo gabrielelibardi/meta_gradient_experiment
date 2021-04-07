@@ -144,7 +144,7 @@ def get_args():
         '--frame-skip', type=int, default=0,
         help='Number of frame to skip for each action')
     parser.add_argument(
-        '--frame-stack', type=int, default=4,
+        '--frame-stack', type=int, default=1,
         help='Number of frame to stack in observation')
     parser.add_argument(
         '--task', default='LunarLander-v2',

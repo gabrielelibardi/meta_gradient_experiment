@@ -158,7 +158,8 @@ class MetaMLP(nn.Module):
 
     def forward(self, inputs, actions, *args):
 
-        rews = self.meta_reward(torch.cat(inputs, actions))
+        import ipdb; ipdb.set_trace()
+        rews = self.meta_reward(torch.cat([inputs, actions.float()], dim=-1))
         vals = self.meta_critic(inputs)
 
         return rews, vals

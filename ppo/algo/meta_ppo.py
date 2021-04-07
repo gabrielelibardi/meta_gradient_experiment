@@ -70,8 +70,7 @@ class MetaPPO():
             for sample in data_generator:
 
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
-                adv_targ = sample
+                value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch = sample
 
                 # Generate intrinsic rewards
                 int_rewards, _ = self.actor_critic.predict_intrinsic(obs_batch, actions_batch)
