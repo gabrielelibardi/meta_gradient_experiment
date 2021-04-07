@@ -90,7 +90,7 @@ class MetaPolicy(nn.Module):
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action_log_probs, dist_entropy, rnn_hxs, dist
+        return value, action_log_probs, dist_entropy, dist
 
     def actions_prob(self, inputs, rnn_hxs, masks, action):
 
@@ -158,7 +158,6 @@ class MetaMLP(nn.Module):
 
     def forward(self, inputs, actions, *args):
 
-        import ipdb; ipdb.set_trace()
         rews = self.meta_reward(torch.cat([inputs, actions.float()], dim=-1))
         vals = self.meta_critic(inputs)
 
