@@ -55,7 +55,9 @@ class RolloutStorage(object):
         self.actions = self.actions.to(device)
         self.masks = self.masks.to(device)
         self.bad_masks = self.bad_masks.to(device)
-
+        self.rewards_intrinsic = self.rewards_intrinsic.to(device)
+        self.value_preds_intrinsic = self.value_preds_intrinsic.to(device)
+        self.returns_intrinsic = self.returns_intrinsic.to(device)
 
     def insert(self, obs, recurrent_hidden_states, actions, action_log_probs,
                value_preds, rewards, masks, bad_masks):
