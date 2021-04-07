@@ -64,7 +64,8 @@ def main():
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             s = "Update {}, num timesteps {}, FPS {} \n".format(
                 j, total_num_steps, int(total_num_steps / (time.time() - start)))
-            s += "Loss {}, meta loss {}, value_loss {}, meta_value_loss {}, action_loss {}, meta action loss {}".format(
+            s += "Loss {:.4f}, meta loss {:.4f}, value_loss {:.4f}, meta_value_loss {:.4f}," \
+                 " action_loss {:.4f}, meta action loss {:.4f}".format(
                 loss, meta_loss, value_loss, meta_value_loss, action_loss, meta_action_loss)
             print(s, flush=True)
 
