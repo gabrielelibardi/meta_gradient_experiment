@@ -6,7 +6,8 @@ import torch
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
 
-from ppo import algo, utils
+from ppo import utils
+from ppo.algo.meta_ppo import MetaPPO
 from ppo.envs import make_vec_envs
 from ppo.model import MetaPolicy
 from ppo.storage import RolloutStorage
@@ -36,10 +37,11 @@ def main():
 
     actor_critic.to(device)
 
-    agent = algo.PPOKL(actor_critic, rew_func, args.clip_param, args.ppo_epoch,
-                       args.num_mini_batch, args.value_loss_coef,
-                       args.entropy_coef, lr=args.lr, eps=args.eps,
-                       max_grad_norm=args.max_grad_norm)
+    agent = MetaPPO(
+        actor_critic, args.clip_param, args.ppo_epoch,
+        args.num_mini_batch, args.value_loss_coef,
+        args.entropy_coef, lr=args.lr, eps=args.eps,
+        max_grad_norm=args.max_grad_norm)
 
     obs = envs.reset()
     rollouts = RolloutStorage(args.num_steps, args.num_processes, obs, envs.action_space, actor_critic.recurrent_hidden_state_size)
@@ -145,7 +147,7 @@ def get_args():
         '--frame-stack', type=int, default=4,
         help='Number of frame to stack in observation')
     parser.add_argument(
-        '--task', default='HalfCheetahPyBulletEnv-v0',
+        '--task', default='LunarLander-v2',
         help='which of the pybullet task')
     args = parser.parse_args()
     args.log_dir = os.path.expanduser(args.log_dir)

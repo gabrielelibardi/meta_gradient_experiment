@@ -46,7 +46,7 @@ class MetaPolicy(nn.Module):
         #                             META NET                                #
         #######################################################################
 
-        self.meta_net = MetaPolicy(obs_shape[0], act_shape[0])
+        self.meta_net = MetaMLP(obs_shape[0], act_shape[0])
 
     @property
     def is_recurrent(self):
@@ -107,6 +107,8 @@ class PolicyMLP(nn.Module):
     def __init__(self, num_inputs, hidden_size=64):
         super(PolicyMLP, self).__init__()
 
+        self.hidden_size = hidden_size
+
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
 
         self.actor = nn.Sequential(
@@ -120,6 +122,10 @@ class PolicyMLP(nn.Module):
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
 
         self.train()
+
+    @property
+    def output_size(self):
+        return self.hidden_size
 
     def forward(self, inputs, *args):
 
