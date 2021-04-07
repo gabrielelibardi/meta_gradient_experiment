@@ -126,7 +126,7 @@ class MetaPPO():
                  entropy_coef,
                  lr=None,
                  eps=None,
-                 meta_lr=1e-6,
+                 meta_lr=1e-4,
                  max_grad_norm=None,
                  use_clipped_value_loss=True):
 
