@@ -165,4 +165,4 @@ class RolloutStorage(object):
 
             yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch,\
-                  adv_targ, adv_targ_int, value_preds_batch_int, return_batch_int
+                  adv_targ, adv_targ_int, value_preds_int_batch, return_int_batch
