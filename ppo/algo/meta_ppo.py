@@ -288,11 +288,11 @@ def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda, use_pr
 
     rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
 
-    with torch.no_grad():
-        int_rewards, int_values = actor_critic.predict_intrinsic(rollouts.obs[:-1], rollouts.actions)
-        rollouts.rewards_intrinsic.copy_(int_rewards)
-        rollouts.value_preds_intrinsic[:-1].copy_(int_values)
-        next_int_value = actor_critic.meta_net.meta_critic(rollouts.obs[-1])
+
+    int_rewards, int_values = actor_critic.predict_intrinsic(rollouts.obs[:-1], rollouts.actions)
+    rollouts.rewards_intrinsic.copy_(int_rewards)
+    rollouts.value_preds_intrinsic[:-1].copy_(int_values)
+    next_int_value = actor_critic.meta_net.meta_critic(rollouts.obs[-1])
 
     rollouts.compute_returns_intrinsic(next_int_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
 
