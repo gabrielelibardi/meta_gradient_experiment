@@ -187,8 +187,7 @@ class MetaPPO():
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
                 adv_targ, adv_targ_int, value_preds_batch_int, return_batch_int = sample
 
-                # Generate intrinsic rewards
-                _, int_values = self.actor_critic.predict_intrinsic(obs_batch, actions_batch)
+
 
                 ###############################################################
 
@@ -198,7 +197,8 @@ class MetaPPO():
 
                 # Only internal returns
                 mix_return_batch = return_batch_int  # + return_batch
-                mix_values = int_values  # + values
+                # here values is the real intrinsic value
+                mix_values = values  # + values
                 mix_adv = adv_targ_int # * 0.5 + 0.5 adv_targ ?
 
                 # Compute normal action loss
@@ -227,13 +227,14 @@ class MetaPPO():
                 dist_entropy_epoch += dist_entropy.item()
 
                 # META STUFF ##################################################
+                 # Generate extrinsic values extimates
+                _, ext_values = self.actor_critic.predict_intrinsic(obs_batch, actions_batch)
 
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
                 ext_return_batch = return_batch
-                ext_values = values
                 ext_adv = adv_targ
 
                 # Compute meta action loss
@@ -243,23 +244,27 @@ class MetaPPO():
                 meta_action_loss = - torch.min(surr1, surr2).mean()
 
                 # Compute meta value loss
+                # ext values are the ones we fit to the extrinsic rewards
                 meta_value_loss = 0.5 * (ext_return_batch - ext_values).pow(2).mean()
 
                 # Compute meta loss
                 meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss - dist_entropy * self.entropy_coef
 
                 # Meta backward pass
-                meta_loss.backward()
+                meta_loss.backward(retain_graph=True)
+                #print('grad meta')
+                #print([par.grad for par in self.actor_critic.meta_net.meta_reward.parameters()])
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.meta_optimizer.step()
 
-        num_updates = self.ppo_epoch * self.num_mini_batch
 
-        value_loss_epoch /= num_updates
-        action_loss_epoch /= num_updates
-        dist_entropy_epoch /= num_updates
+            num_updates = self.ppo_epoch * self.num_mini_batch
 
-        return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
+            value_loss_epoch /= num_updates
+            action_loss_epoch /= num_updates
+            dist_entropy_epoch /= num_updates
+
+            return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
 
 
 def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
@@ -281,23 +286,28 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
 
 
 def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda, use_proper_time_limits):
-
+    
     with torch.no_grad():
         next_value = actor_critic.get_value(rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1],
             rollouts.masks[-1]).detach()
 
-    rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
-
-
-    int_rewards, int_values = actor_critic.predict_intrinsic(rollouts.obs[:-1], rollouts.actions)
-    rollouts.rewards_intrinsic.copy_(int_rewards)
-    rollouts.value_preds_intrinsic[:-1].copy_(int_values)
-    next_int_value = actor_critic.meta_net.meta_critic(rollouts.obs[-1])
-
-    rollouts.compute_returns_intrinsic(next_int_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
-
-    value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts)
-    rollouts.after_update()
+    # took out the no_grad
+    # ext_values instead of int_values
+    int_rewards, ext_values = actor_critic.predict_intrinsic(rollouts.obs[:-1], rollouts.actions)
+    
+    # depp copy to avoid the inplace error
+    new_rollouts = deepcopy(rollouts)
+    new_rollouts.rewards_intrinsic.copy_(int_rewards)
+    new_rollouts.value_preds[:-1].copy_(ext_values) # changed to value_pred not intrinsic 
+    
+    next_ext_value = actor_critic.meta_net.meta_critic(torch.clone(new_rollouts.obs[-1])) # ext_value
+    
+    new_rollouts.compute_returns(next_ext_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
+    
+    new_rollouts.compute_returns_intrinsic(next_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
+  
+    value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(new_rollouts)
+    new_rollouts.after_update()
 
     return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
 

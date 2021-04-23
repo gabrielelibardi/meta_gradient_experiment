@@ -65,7 +65,7 @@ class RolloutStorage(object):
         self.recurrent_hidden_states[self.step + 1].copy_(recurrent_hidden_states)
         self.actions[self.step].copy_(actions)
         self.action_log_probs[self.step].copy_(action_log_probs)
-        self.value_preds[self.step].copy_(value_preds)
+        self.value_preds_intrinsic[self.step].copy_(value_preds) # changed to intrinsic
         self.rewards[self.step].copy_(rewards)
         self.masks[self.step + 1].copy_(masks)
         self.bad_masks[self.step + 1].copy_(bad_masks)
@@ -87,20 +87,20 @@ class RolloutStorage(object):
         if use_proper_time_limits:
             if use_gae:
                 gae = 0
-                self.value_preds_intinsic[-1] = next_value
-                for step in reversed(range(self.rewards_intinsic.size(0))):
+                self.value_preds_intrinsic[-1] = next_value
+                for step in reversed(range(self.rewards_intrinsic.size(0))):
 
-                    delta = self.rewards_intinsic[step] + gamma * self.value_preds_intinsic[step + 1] \
-                        * self.masks[step + 1] - self.value_preds_intinsic[step]
+                    delta = self.rewards_intrinsic[step] + gamma * self.value_preds_intrinsic[step + 1] \
+                        * self.masks[step + 1] - self.value_preds_intrinsic[step]
 
                     gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
 
-                    self.returns_intinsic[step] = gae + self.value_preds_intinsic[step]
+                    self.returns_intrinsic[step] = gae + self.value_preds_intrinsic[step]
             else:
-                self.returns_intinsic[-1] = next_value
-                for step in reversed(range(self.rewards_intinsic.size(0))):
-                    self.returns_intinsic[step] = self.returns_intinsic[step + 1] * \
-                        gamma * self.masks[step + 1] + self.rewards_intinsic[step]
+                self.returns_intrinsic[-1] = next_value
+                for step in reversed(range(self.rewards_intrinsic.size(0))):
+                    self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
+                        gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
 
     def compute_returns(self,
                         next_value,
@@ -165,4 +165,4 @@ class RolloutStorage(object):
 
             yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch,\
-                  adv_targ, adv_targ_int, value_preds_int_batch, return_int_batch
+                  adv_targ, adv_targ_int, value_preds_int_batch.clone(), return_int_batch.clone()
