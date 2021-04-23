@@ -248,7 +248,8 @@ class MetaPPO():
                 meta_value_loss = 0.5 * (ext_return_batch - ext_values).pow(2).mean()
 
                 # Compute meta loss
-                meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss - dist_entropy * self.entropy_coef
+                # The entropy is already accounted for in the other loss
+                meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss #- dist_entropy * self.entropy_coef
 
                 # Meta backward pass
                 meta_loss.backward(retain_graph=True)
