@@ -278,7 +278,7 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
 
         # Obser reward and next obs
         obs, reward, done, infos = envs.step(action)
-
+        
         # If done then clean the history of observations.
         masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
         bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
