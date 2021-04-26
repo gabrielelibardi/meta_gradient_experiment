@@ -4,6 +4,7 @@ import time
 import argparse
 import numpy as np
 import torch
+import csv
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
 
@@ -15,10 +16,28 @@ from ppo.storage import RolloutStorage
 from ppo.algo.meta_ppo import ppo_rollout, ppo_update, ppo_save_model
 from bullet.make_pybullet_env import make_pybullet_env
 
+class LossWriter(object):
+    def __init__(self, log_dir, fieldnames = ('r', 'l', 't'), header=''):
+        
+        assert log_dir is not None
+        
+        os.mkdir(log_dir + '/loss_monitor')
+        filename = '{}/loss_monitor/loss_monitor.csv'.format(log_dir)
+        self.f = open(filename, "wt")
+        self.f.write(header)
+        self.logger = csv.DictWriter(self.f, fieldnames=fieldnames)
+        self.logger.writeheader()
+        self.f.flush()
+
+    def write_row(self, training_info):
+        if self.logger:
+            self.logger.writerow(training_info)
+            self.f.flush()
+
 
 def main():
     args = get_args()
-
+    
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -32,6 +51,8 @@ def main():
     envs = make_vec_envs(env_make, args.num_processes, args.log_dir, device, args.frame_stack)
 
     actor_critic = MetaPolicy(envs.observation_space, envs.action_space)
+    
+    loss_writer = LossWriter(args.log_dir, fieldnames= ('V_loss','action_loss','meta_action_loss','meta_value_loss','meta_loss', 'loss'))
 
     if args.restart_model:
         actor_critic.load_state_dict(
@@ -58,7 +79,9 @@ def main():
 
         value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = ppo_update(
             agent, actor_critic, rollouts, args.use_gae, args.gamma, args.gae_lambda, args.use_proper_time_limits)
-
+        
+        loss_writer.write_row({'V_loss': value_loss.item(), 'action_loss': action_loss.item(), 'meta_action_loss':meta_action_loss.item(),'meta_value_loss':meta_value_loss.item(),'meta_loss': meta_loss.item(), 'loss': loss.item()} )
+        
         if (j % args.save_interval == 0 or j == num_updates - 1) and args.log_dir != "":
             ppo_save_model(actor_critic, os.path.join(args.log_dir, "model.state_dict"), j)
 

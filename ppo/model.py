@@ -45,10 +45,9 @@ class MetaPolicy(nn.Module):
         #######################################################################
         #                             META NET                                #
         #######################################################################
-
         self.meta_net = MetaMLP(
             obs_shape[0],
-            act_shape[0], #act_shape[0]
+            1, #act_shape[0]
             )
 
     @property
