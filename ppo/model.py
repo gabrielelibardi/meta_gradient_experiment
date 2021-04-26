@@ -48,7 +48,7 @@ class MetaPolicy(nn.Module):
 
         self.meta_net = MetaMLP(
             obs_shape[0],
-            1, #act_shape[0]
+            act_shape[0], #act_shape[0]
             )
 
     @property
@@ -100,7 +100,6 @@ class MetaPolicy(nn.Module):
         return action_probs
 
     def predict_intrinsic(self, inputs, actions):
-
         int_rews, int_vals = self.meta_net(inputs, actions)
 
         return int_rews, int_vals
@@ -143,7 +142,7 @@ class MetaMLP(nn.Module):
         super(MetaMLP, self).__init__()
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
-
+        
         self.meta_reward = nn.Sequential(
             init_(nn.Linear(num_obs_inputs + num_act_inputs, hidden_size)), nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)), nn.ReLU(),
@@ -157,7 +156,6 @@ class MetaMLP(nn.Module):
         self.train()
 
     def forward(self, inputs, actions, *args):
-
         rews = self.meta_reward(torch.cat([inputs, actions.float()], dim=-1))
         vals = self.meta_critic(inputs)
 
