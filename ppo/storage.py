@@ -80,11 +80,7 @@ class RolloutStorage(object):
 
     def compute_returns_intrinsic(self, meta_policy, gamma):
 
-        rewards_int, values_int = meta_policy.predict_intrinsic(self.obs[:-1], self.actions)
-
-        self.rewards_intrinsic.copy_(rewards_int)
-        self.value_preds_intrinsic[:-1].copy_(values_int)
-
+        self.rewards_intrinsic, self.value_preds_intrinsic[:-1] = meta_policy.predict_intrinsic(self.obs[:-1], self.actions)
         next_value = meta_policy.meta_net.meta_critic(self.obs[-1])
         self.returns_intrinsic[-1] = next_value
 
