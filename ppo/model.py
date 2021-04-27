@@ -145,7 +145,7 @@ class MetaMLP(nn.Module):
         self.meta_reward = nn.Sequential(
             init_(nn.Linear(num_obs_inputs + num_act_inputs, hidden_size)), nn.ReLU(),
             init_(nn.Linear(hidden_size, hidden_size)), nn.ReLU(),
-            init_(nn.Linear(hidden_size, 1)), nn.Tanh()) # added tanh like in paper
+            init_(nn.Linear(hidden_size, 1)), nn.Tanh())  # added tanh like in paper
 
         self.meta_critic = nn.Sequential(
             init_(nn.Linear(num_obs_inputs, hidden_size)), nn.ReLU(),

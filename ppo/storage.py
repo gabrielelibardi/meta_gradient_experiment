@@ -127,8 +127,6 @@ class RolloutStorage(object):
                         gamma * self.masks[step + 1] + self.rewards[step]
 
     def feed_forward_generator(self,
-                               advantages,
-                               advantages_intrinsic,
                                num_mini_batch=None,
                                mini_batch_size=None):
         num_steps, num_processes = self.rewards.size()[0:2]
@@ -153,16 +151,9 @@ class RolloutStorage(object):
             obs_batch = self.obs[:-1].view(-1, *self.obs.size()[2:])[indices]
             recurrent_hidden_states_batch = self.recurrent_hidden_states[:-1].view(-1, self.recurrent_hidden_states.size(-1))[indices]
             actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
-            value_preds_batch = self.value_preds[:-1].view(-1, 1)[indices]
-            value_preds_int_batch = self.value_preds_intrinsic[:-1].view(-1, 1)[indices]
             return_batch = self.returns[:-1].view(-1, 1)[indices]
-            return_int_batch = self.returns_intrinsic[:-1].view(-1, 1)[indices]
             masks_batch = self.masks[:-1].view(-1, 1)[indices]
             old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
 
-            adv_targ = advantages.view(-1, 1)[indices]
-            adv_targ_int = advantages_intrinsic.view(-1, 1)[indices]
-
-            yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch,\
-                  adv_targ, adv_targ_int, value_preds_int_batch.clone(), return_int_batch.clone()
+            yield obs_batch, recurrent_hidden_states_batch, actions_batch,\
+                  return_batch, masks_batch, old_action_log_probs_batch
