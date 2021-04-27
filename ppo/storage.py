@@ -83,10 +83,11 @@ class RolloutStorage(object):
         self.rewards_intrinsic, self.value_preds_intrinsic[:-1] = meta_policy.predict_intrinsic(self.obs[:-1], self.actions)
         next_value = meta_policy.meta_net.meta_critic(self.obs[-1])
         self.returns_intrinsic[-1] = next_value
+        self.returns_intrinsic[:-1] = self.rewards_intrinsic
 
-        for step in reversed(range(self.rewards_intrinsic.size(0))):
-            self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
-                gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
+        # for step in reversed(range(self.rewards_intrinsic.size(0))):
+        #     self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
+        #         gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
 
     def compute_returns(self, next_value, use_gae, gamma, gae_lambda):
         if use_gae:
