@@ -68,7 +68,13 @@ class PPO:
                 action_loss = - torch.min(surr1, surr2).mean()
 
                 # Compute normal value loss
-                value_loss = 0.5 * (return_batch - values).pow(2).mean()
+                if self.use_clipped_value_loss:
+                    value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
+                    value_losses = (values - return_batch).pow(2)
+                    value_losses_clipped = (value_pred_clipped - return_batch).pow(2)
+                    value_loss = 0.5 * torch.max(value_losses, value_losses_clipped).mean()
+                else:
+                    value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                 # Compute normal loss
                 loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
@@ -125,7 +131,7 @@ class MetaPPO:
         self.optimizer = optim.Adam(actor_critic.policy.parameters(), lr=lr, eps=eps)
         self.meta_optimizer = optim.Adam(actor_critic.meta_net.parameters(), lr=meta_lr, eps=eps)
 
-    def update(self, rollouts):
+    def update(self, rollouts, gamma):
 
         value_loss_epoch = 0
         action_loss_epoch = 0
@@ -133,86 +139,87 @@ class MetaPPO:
 
         for e in range(self.ppo_epoch):
 
-            data_generator = rollouts.feed_forward_generator(
-                self.num_mini_batch)
+            rollouts.compute_returns_intrinsic(self.actor_critic, gamma)
+            sample = rollouts.feed_forward_generator(self.num_mini_batch)
 
-            for sample in data_generator:
+            obs_batch, recurrent_hidden_states_batch, actions_batch, \
+            return_batch, masks_batch, old_action_log_probs_batch, \
+            value_preds_batch, return_batch_int, value_batch_int = sample
 
-                obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                return_batch, masks_batch, old_action_log_probs_batch = sample
+            ###############################################################
 
-                ###############################################################
+            values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
+                obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
-                # compute intrinsic values and rewards
-                return_batch_int, value_batch_int = self.actor_critic.predict_intrinsic(
-                    obs_batch, actions_batch)
+            # compute intrinsic adv
+            adv_targ = return_batch_int - values
+            adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
 
-                values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
-                    obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
+            # Compute normal action loss
+            ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
+            surr1 = ratio * adv_targ
+            surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+            action_loss = - torch.min(surr1, surr2).mean()
 
-                # compute intrinsic adv
-                adv_targ = return_batch_int - values
-                adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
-
-                # Compute normal action loss
-                ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
-                surr1 = ratio * adv_targ
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-                action_loss = - torch.min(surr1, surr2).mean()
-
-                # Compute normal value loss
+            # Compute normal value loss
+            if self.use_clipped_value_loss:
+                value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
+                value_losses = (values - return_batch_int).pow(2)
+                value_losses_clipped = (value_pred_clipped - return_batch_int).pow(2)
+                value_loss = 0.5 * torch.max(value_losses, value_losses_clipped).mean()
+            else:
                 value_loss = 0.5 * (return_batch_int - values).pow(2).mean()
 
-                # Compute normal loss
-                loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
+            # Compute normal loss
+            loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
 
-                # Clean grads from previous iteration in both optimizers
-                self.optimizer.zero_grad()
-                self.meta_optimizer.zero_grad()
+            # Clean grads from previous iteration in both optimizers
+            self.optimizer.zero_grad()
+            self.meta_optimizer.zero_grad()
 
-                # Normal backward pass
-                loss.backward(retain_graph=True)
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
-                self.optimizer.step()
+            # Normal backward pass
+            loss.backward(retain_graph=True)
+            nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+            self.optimizer.step()
 
-                value_loss_epoch += value_loss.item()
-                action_loss_epoch += action_loss.item()
-                dist_entropy_epoch += dist_entropy.item()
+            value_loss_epoch += value_loss.item()
+            action_loss_epoch += action_loss.item()
+            dist_entropy_epoch += dist_entropy.item()
 
-                # META STUFF ##################################################
+            # META STUFF ##################################################
 
-                _, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
-                    obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
+            _, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
+                obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
-                # compute extrinsic adv
-                adv_targ = return_batch - value_batch_int
-                adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
+            # compute extrinsic adv
+            adv_targ = return_batch - value_batch_int
+            adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
 
-                # Compute meta action loss
-                ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
-                surr1 = ratio * adv_targ
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-                meta_action_loss = - torch.min(surr1, surr2).mean()
+            # Compute meta action loss
+            ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
+            surr1 = ratio * adv_targ
+            surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
+            meta_action_loss = - torch.min(surr1, surr2).mean()
 
-                # Compute meta value loss
-                meta_value_loss = 0.5 * (return_batch - value_batch_int).pow(2).mean()
+            # Compute meta value loss
+            meta_value_loss = 0.5 * (return_batch - value_batch_int).pow(2).mean()
 
-                # Compute meta loss
-                # The entropy is already accounted for in the other loss
-                meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss  # - dist_entropy * self.entropy_coef
+            # Compute meta loss
+            # The entropy is already accounted for in the other loss
+            meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss  # - dist_entropy * self.entropy_coef
 
-                # Meta backward pass
-                meta_loss.backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
-                self.meta_optimizer.step()
+            # Meta backward pass
+            meta_loss.backward()
+            nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+            self.meta_optimizer.step()
 
-            num_updates = self.ppo_epoch * self.num_mini_batch
+        num_updates = self.ppo_epoch * self.num_mini_batch
 
-            value_loss_epoch /= num_updates
-            action_loss_epoch /= num_updates
-            dist_entropy_epoch /= num_updates
+        value_loss_epoch /= num_updates
+        action_loss_epoch /= num_updates
+        dist_entropy_epoch /= num_updates
 
-            return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
+        return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
 
 
 def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
@@ -240,7 +247,7 @@ def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda):
             rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
 
     rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda)
-    value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts)
+    value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts, gamma)
     rollouts.after_update()
 
     return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss

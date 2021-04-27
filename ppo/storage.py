@@ -78,69 +78,44 @@ class RolloutStorage(object):
         self.masks[0].copy_(self.masks[-1])
         self.bad_masks[0].copy_(self.bad_masks[-1])
 
-    def compute_returns_intrinsic(self,
-                                  next_value,
-                                  use_gae,
-                                  gamma,
-                                  gae_lambda):
-        if use_gae:
-            gae = 0
-            self.value_preds_intrinsic[-1] = next_value
-            for step in reversed(range(self.rewards_intrinsic.size(0))):
+    def compute_returns_intrinsic(self, meta_policy, gamma):
 
-                delta = self.rewards_intrinsic[step] + gamma * self.value_preds_intrinsic[step + 1] \
-                    * self.masks[step + 1] - self.value_preds_intrinsic[step]
+        rewards_int, values_int = meta_policy.predict_intrinsic(self.obs[:-1], self.actions)
 
-                gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
+        self.rewards_intrinsic.copy_(rewards_int)
+        self.value_preds_intrinsic[:-1].copy_(values_int)
 
-                self.returns_intrinsic[step] = gae + self.value_preds_intrinsic[step]
-        else:
-            self.returns_intrinsic[-1] = next_value
-            for step in reversed(range(self.rewards_intrinsic.size(0))):
-                self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
-                    gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
+        next_value = meta_policy.meta_net.meta_critic(self.obs[-1])
+        self.returns_intrinsic[-1] = next_value
 
-    def compute_returns(self,
-                        next_value,
-                        use_gae,
-                        gamma,
-                        gae_lambda):
+        for step in reversed(range(self.rewards_intrinsic.size(0))):
+            self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
+                gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
+
+    def compute_returns(self, next_value, use_gae, gamma, gae_lambda):
         if use_gae:
             gae = 0
             self.value_preds[-1] = next_value
             for step in reversed(range(self.rewards.size(0))):
-
-                delta = self.rewards[step] + gamma * self.value_preds[step + 1] \
-                    * self.masks[step + 1] - self.value_preds[step]
-
+                delta = self.rewards[step] + gamma * self.value_preds[step + 1] * self.masks[step + 1] - self.value_preds[step]
                 gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
-
                 self.returns[step] = gae + self.value_preds[step]
+
         else:
             self.returns[-1] = next_value
             for step in reversed(range(self.rewards.size(0))):
                 self.returns[step] = self.returns[step + 1] * \
                     gamma * self.masks[step + 1] + self.rewards[step]
 
-    def feed_forward_generator(self,
-                               num_mini_batch=None,
-                               mini_batch_size=None):
+    def feed_forward_generator(self):
+
         num_steps, num_processes = self.rewards.size()[0:2]
         batch_size = num_processes * num_steps
 
-        if mini_batch_size is None:
-
-            assert batch_size >= num_mini_batch, (
-                "PPO requires the number of processes ({}) "
-                "* number of steps ({}) = {} "
-                "to be greater than or equal to the number of PPO mini batches ({})."
-                "".format(num_processes, num_steps, num_processes * num_steps,
-                          num_mini_batch))
-            mini_batch_size = batch_size // num_mini_batch
-
+        # only 1 batch
         sampler = BatchSampler(
             SubsetRandomSampler(range(batch_size)),
-            mini_batch_size,
+            batch_size,
             drop_last=True)
 
         for indices in sampler:
@@ -150,6 +125,10 @@ class RolloutStorage(object):
             return_batch = self.returns[:-1].view(-1, 1)[indices]
             masks_batch = self.masks[:-1].view(-1, 1)[indices]
             old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
+            value_preds_batch = self.value_preds[:-1].view(-1, 1)[indices]
+            return_batch_int = self.returns_intrinsic[:-1].view(-1, 1)[indices]
+            value_preds_batch_int = self.value_preds_intrinsic[:-1].view(-1, 1)[indices]
 
-            yield obs_batch, recurrent_hidden_states_batch, actions_batch,\
-                  return_batch, masks_batch, old_action_log_probs_batch
+            return obs_batch, recurrent_hidden_states_batch, actions_batch,\
+                   return_batch, masks_batch, old_action_log_probs_batch,\
+                   value_preds_batch, return_batch_int, value_preds_batch_int
