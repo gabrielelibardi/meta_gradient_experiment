@@ -108,6 +108,16 @@ class RolloutStorage(object):
         num_steps, num_processes = self.rewards.size()[0:2]
         batch_size = num_processes * num_steps
 
+        return self.obs[:-1].view(-1, *self.obs.size()[2:]), \
+               self.recurrent_hidden_states[:-1].view(-1, self.recurrent_hidden_states.size(-1)), \
+               self.actions.view(-1, self.actions.size(-1)), \
+               self.returns[:-1].view(-1, 1), \
+               self.masks[:-1].view(-1, 1), \
+               self.action_log_probs.view(-1, 1), \
+               self.value_preds[:-1].view(-1, 1), \
+               self.returns_intrinsic[:-1].view(-1, 1), \
+               self.value_preds_intrinsic[:-1].view(-1, 1)
+
         # only 1 batch
         sampler = BatchSampler(
             SubsetRandomSampler(range(batch_size)),
@@ -128,3 +138,5 @@ class RolloutStorage(object):
             return obs_batch, recurrent_hidden_states_batch, actions_batch,\
                    return_batch, masks_batch, old_action_log_probs_batch,\
                    value_preds_batch, return_batch_int, value_preds_batch_int
+
+
