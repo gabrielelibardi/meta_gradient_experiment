@@ -79,11 +79,9 @@ class RolloutStorage(object):
         self.bad_masks[0].copy_(self.bad_masks[-1])
 
     def compute_returns_intrinsic(self, meta_policy, gamma):
-
-        self.rewards_intrinsic, self.value_preds_intrinsic[:-1] = meta_policy.predict_intrinsic(self.obs[:-1], self.actions)
-        next_value = meta_policy.meta_net.meta_critic(self.obs[-1])
-        self.returns_intrinsic[-1] = next_value
-
+        with torch.no_grad:
+            self.rewards_intrinsic, _ = meta_policy.predict_intrinsic(self.obs[:-1], self.actions)
+            self.returns_intrinsic[-1] = meta_policy.meta_net.meta_critic(self.obs[-1])
         for step in reversed(range(self.rewards_intrinsic.size(0))):
             self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
                 gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
