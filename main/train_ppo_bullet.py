@@ -78,7 +78,7 @@ def main():
         ppo_rollout(args.num_steps, envs, actor_critic, rollouts)
 
         value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = ppo_update(
-            agent, actor_critic, rollouts, args.use_gae, args.gamma, args.gae_lambda, args.use_proper_time_limits)
+            agent, actor_critic, rollouts, args.use_gae, args.gamma, args.gae_lambda)
         
         loss_writer.write_row({'V_loss': value_loss.item(), 'action_loss': action_loss.item(), 'meta_action_loss':meta_action_loss.item(),'meta_value_loss':meta_value_loss.item(),'meta_loss': meta_loss.item(), 'loss': loss.item()} )
         
@@ -89,9 +89,8 @@ def main():
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             s = "Update {}, num timesteps {}, FPS {} \n".format(
                 j, total_num_steps, int(total_num_steps / (time.time() - start)))
-            s += "Loss {:.5f}, meta loss {:.5f}, value_loss {:.5f}, meta_value_loss {:.5f}," \
-                 " action_loss {:.5f}, meta action loss {:.5f}".format(
-                loss, meta_loss, value_loss, meta_value_loss, action_loss, meta_action_loss)
+            s += "Loss {:.5f}, meta loss {:.5f}, value_loss {:.5f}, meta_value_loss {:.5f}, action_loss {:.5f}, meta action loss {:.5f}".format(
+                loss.item(), meta_loss.item(), value_loss.item(), meta_value_loss.item(), action_loss.item(), meta_action_loss.item())
             print(s, flush=True)
 
 
@@ -155,9 +154,6 @@ def get_args():
     parser.add_argument(
         '--log-dir', default='/tmp/ppo/',
         help='directory to save agent logs (default: /tmp/ppo)')
-    parser.add_argument(
-        '--use-proper-time-limits', action='store_true', default=False,
-        help='compute returns taking into account time limits')
     parser.add_argument(
         '--recurrent-policy', action='store_true', default=False,
         help='use a recurrent policy')

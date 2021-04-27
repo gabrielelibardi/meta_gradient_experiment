@@ -82,49 +82,45 @@ class RolloutStorage(object):
                                   next_value,
                                   use_gae,
                                   gamma,
-                                  gae_lambda,
-                                  use_proper_time_limits=True):
-        if use_proper_time_limits:
-            if use_gae:
-                gae = 0
-                self.value_preds_intrinsic[-1] = next_value
-                for step in reversed(range(self.rewards_intrinsic.size(0))):
+                                  gae_lambda):
+        if use_gae:
+            gae = 0
+            self.value_preds_intrinsic[-1] = next_value
+            for step in reversed(range(self.rewards_intrinsic.size(0))):
 
-                    delta = self.rewards_intrinsic[step] + gamma * self.value_preds_intrinsic[step + 1] \
-                        * self.masks[step + 1] - self.value_preds_intrinsic[step]
+                delta = self.rewards_intrinsic[step] + gamma * self.value_preds_intrinsic[step + 1] \
+                    * self.masks[step + 1] - self.value_preds_intrinsic[step]
 
-                    gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
+                gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
 
-                    self.returns_intrinsic[step] = gae + self.value_preds_intrinsic[step]
-            else:
-                self.returns_intrinsic[-1] = next_value
-                for step in reversed(range(self.rewards_intrinsic.size(0))):
-                    self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
-                        gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
+                self.returns_intrinsic[step] = gae + self.value_preds_intrinsic[step]
+        else:
+            self.returns_intrinsic[-1] = next_value
+            for step in reversed(range(self.rewards_intrinsic.size(0))):
+                self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
+                    gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
 
     def compute_returns(self,
                         next_value,
                         use_gae,
                         gamma,
-                        gae_lambda,
-                        use_proper_time_limits=True):
-        if use_proper_time_limits:
-            if use_gae:
-                gae = 0
-                self.value_preds[-1] = next_value
-                for step in reversed(range(self.rewards.size(0))):
+                        gae_lambda):
+        if use_gae:
+            gae = 0
+            self.value_preds[-1] = next_value
+            for step in reversed(range(self.rewards.size(0))):
 
-                    delta = self.rewards[step] + gamma * self.value_preds[step + 1] \
-                        * self.masks[step + 1] - self.value_preds[step]
+                delta = self.rewards[step] + gamma * self.value_preds[step + 1] \
+                    * self.masks[step + 1] - self.value_preds[step]
 
-                    gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
+                gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
 
-                    self.returns[step] = gae + self.value_preds[step]
-            else:
-                self.returns[-1] = next_value
-                for step in reversed(range(self.rewards.size(0))):
-                    self.returns[step] = self.returns[step + 1] * \
-                        gamma * self.masks[step + 1] + self.rewards[step]
+                self.returns[step] = gae + self.value_preds[step]
+        else:
+            self.returns[-1] = next_value
+            for step in reversed(range(self.rewards.size(0))):
+                self.returns[step] = self.returns[step + 1] * \
+                    gamma * self.masks[step + 1] + self.rewards[step]
 
     def feed_forward_generator(self,
                                num_mini_batch=None,

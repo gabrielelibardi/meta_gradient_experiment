@@ -144,7 +144,8 @@ class MetaPPO:
                 ###############################################################
 
                 # compute intrinsic values and rewards
-                return_batch_int, _ = self.actor_critic.predict_intrinsic(obs_batch, actions_batch)
+                return_batch_int, value_batch_int = self.actor_critic.predict_intrinsic(
+                    obs_batch, actions_batch)
 
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
@@ -180,11 +181,11 @@ class MetaPPO:
 
                 # META STUFF ##################################################
 
-                values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
+                _, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
                 # compute extrinsic adv
-                adv_targ = return_batch - values
+                adv_targ = return_batch - value_batch_int
                 adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
 
                 # Compute meta action loss
@@ -193,9 +194,12 @@ class MetaPPO:
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
                 meta_action_loss = - torch.min(surr1, surr2).mean()
 
+                # Compute meta value loss
+                meta_value_loss = 0.5 * (return_batch - value_batch_int).pow(2).mean()
+
                 # Compute meta loss
                 # The entropy is already accounted for in the other loss
-                meta_loss = meta_action_loss  # - dist_entropy * self.entropy_coef
+                meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss  # - dist_entropy * self.entropy_coef
 
                 # Meta backward pass
                 meta_loss.backward()
@@ -207,8 +211,6 @@ class MetaPPO:
             value_loss_epoch /= num_updates
             action_loss_epoch /= num_updates
             dist_entropy_epoch /= num_updates
-
-            meta_value_loss = 0
 
             return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
 
@@ -231,13 +233,13 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
         rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, bad_masks)
 
 
-def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda, use_proper_time_limits):
+def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda):
     
     with torch.no_grad():
         next_value = actor_critic.get_value(
             rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
 
-    rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda, use_proper_time_limits)
+    rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda)
     value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts)
     rollouts.after_update()
 
