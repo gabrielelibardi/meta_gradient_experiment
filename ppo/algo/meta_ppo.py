@@ -139,7 +139,11 @@ class MetaPPO:
 
         for e in range(self.ppo_epoch):
 
-            rollouts.compute_returns_intrinsic(self.actor_critic, gamma)
+            # Clean grads from previous iteration in both optimizers
+            self.optimizer.zero_grad()
+            self.meta_optimizer.zero_grad()
+
+            # rollouts.compute_returns_intrinsic(self.actor_critic, gamma)
             sample = rollouts.feed_forward_generator()
 
             obs_batch, recurrent_hidden_states_batch, actions_batch, \
@@ -172,10 +176,6 @@ class MetaPPO:
 
             # Compute normal loss
             loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
-
-            # Clean grads from previous iteration in both optimizers
-            self.optimizer.zero_grad()
-            self.meta_optimizer.zero_grad()
 
             # Normal backward pass
             loss.backward(retain_graph=True)

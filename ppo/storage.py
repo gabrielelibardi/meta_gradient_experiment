@@ -83,11 +83,10 @@ class RolloutStorage(object):
         self.rewards_intrinsic, self.value_preds_intrinsic[:-1] = meta_policy.predict_intrinsic(self.obs[:-1], self.actions)
         next_value = meta_policy.meta_net.meta_critic(self.obs[-1])
         self.returns_intrinsic[-1] = next_value
-        self.returns_intrinsic[:-1] = self.rewards_intrinsic
 
-        # for step in reversed(range(self.rewards_intrinsic.size(0))):
-        #     self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
-        #         gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
+        for step in reversed(range(self.rewards_intrinsic.size(0))):
+            self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
+                gamma * self.masks[step + 1] + self.rewards_intrinsic[step]
 
     def compute_returns(self, next_value, use_gae, gamma, gae_lambda):
         if use_gae:
@@ -108,16 +107,6 @@ class RolloutStorage(object):
 
         num_steps, num_processes = self.rewards.size()[0:2]
         batch_size = num_processes * num_steps
-
-        return self.obs[:-1].view(-1, *self.obs.size()[2:]), \
-               self.recurrent_hidden_states[:-1].view(-1, self.recurrent_hidden_states.size(-1)), \
-               self.actions.view(-1, self.actions.size(-1)), \
-               self.returns[:-1].view(-1, 1), \
-               self.masks[:-1].view(-1, 1), \
-               self.action_log_probs.view(-1, 1), \
-               self.value_preds[:-1].view(-1, 1), \
-               self.returns_intrinsic[:-1].view(-1, 1), \
-               self.value_preds_intrinsic[:-1].view(-1, 1)
 
         # only 1 batch
         sampler = BatchSampler(
