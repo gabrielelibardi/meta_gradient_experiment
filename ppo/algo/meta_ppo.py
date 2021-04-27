@@ -140,7 +140,7 @@ class MetaPPO:
         for e in range(self.ppo_epoch):
 
             rollouts.compute_returns_intrinsic(self.actor_critic, gamma)
-            sample = rollouts.feed_forward_generator(self.num_mini_batch)
+            sample = rollouts.feed_forward_generator()
 
             obs_batch, recurrent_hidden_states_batch, actions_batch, \
             return_batch, masks_batch, old_action_log_probs_batch, \
