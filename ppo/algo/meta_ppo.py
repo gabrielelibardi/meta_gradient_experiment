@@ -56,6 +56,12 @@ class MetaPPO:
 
             ###############################################################
 
+            # compute intrinsic values and rewards
+            reward_batch_int, meta_values = self.actor_critic.predict_intrinsic(
+                obs_batch, actions_batch)
+
+            ###############################################################
+
             values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                 obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
@@ -92,10 +98,6 @@ class MetaPPO:
 
             # META STUFF ##################################################
 
-            # compute intrinsic values and rewards
-            return_batch_int, meta_values = self.actor_critic.predict_intrinsic(
-                obs_batch, actions_batch)
-
             _, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                 obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
@@ -109,7 +111,7 @@ class MetaPPO:
             surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
             meta_action_loss = - torch.min(surr1, surr2).mean()
 
-            # Compute normal value loss
+            # Compute meta value loss
             if self.use_clipped_value_loss:
                 value_pred_clipped = value_preds_batch_int + (meta_values - value_preds_batch_int).clamp(-self.clip_param, self.clip_param)
                 value_losses = (meta_values - return_batch_int).pow(2)
