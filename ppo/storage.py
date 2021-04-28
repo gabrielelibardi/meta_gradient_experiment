@@ -132,7 +132,8 @@ class RolloutStorage(object):
             value_preds_batch_ext = self.value_preds_extrinsic[:-1].view(-1, 1)[indices]
             value_preds_batch_int = self.value_preds_intrinsic[:-1].view(-1, 1)[indices]
             return_batch_ext = self.returns_extrinsic[:-1].view(-1, 1)[indices]
-            return_batch_int = self.returns_intrinsic[:-1].view(-1, 1)[indices]
+            # return_batch_int = self.returns_intrinsic[:-1].view(-1, 1)[indices]
+            return_batch_int = self.returns_intrinsic.view(-1, 1)[indices]
 
             return obs_batch, recurrent_hidden_states_batch, actions_batch, \
                    return_batch_ext, masks_batch, old_action_log_probs_batch, \

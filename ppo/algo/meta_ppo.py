@@ -81,7 +81,6 @@ class MetaPPO:
             loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
 
             # Normal backward pass
-            # loss.backward(retain_graph=True)
             loss.backward()
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
             self.optimizer.step()

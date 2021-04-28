@@ -38,20 +38,17 @@ class LossWriter(object):
 def main():
     args = get_args()
     
+
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     torch.set_num_threads(1)
+
     device = torch.device(args.device)
-
     utils.cleanup_log_dir(args.log_dir)
-
     env_make = make_pybullet_env(args.task, log_dir=args.log_dir, frame_skip=args.frame_skip)
-
     envs = make_vec_envs(env_make, args.num_processes, args.log_dir, device, args.frame_stack)
-
     actor_critic = MetaPolicy(envs.observation_space, envs.action_space)
-    
     loss_writer = LossWriter(args.log_dir, fieldnames= ('V_loss','action_loss','meta_action_loss','meta_value_loss','meta_loss', 'loss'))
 
     if args.restart_model:
