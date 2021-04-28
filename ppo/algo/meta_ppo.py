@@ -35,7 +35,7 @@ class MetaPPO:
         self.optimizer = optim.Adam(actor_critic.policy.parameters(), lr=lr, eps=eps)
         self.meta_optimizer = optim.Adam(actor_critic.meta_net.parameters(), lr=meta_lr, eps=eps)
 
-    def update(self, rollouts, gamma):
+    def update(self, rollouts):
 
         value_loss_epoch = 0
         action_loss_epoch = 0
@@ -50,14 +50,8 @@ class MetaPPO:
             sample = rollouts.feed_forward_generator()
 
             obs_batch, recurrent_hidden_states_batch, actions_batch, \
-            return_batch, masks_batch, old_action_log_probs_batch, \
-            value_preds_batch, return_batch_int, value_preds_batch_int = sample
-
-            ###############################################################
-
-            # compute intrinsic values and rewards
-            reward_batch_int, meta_values = self.actor_critic.predict_intrinsic(
-                obs_batch, actions_batch)
+            return_batch_ext, masks_batch, old_action_log_probs_batch, \
+            value_preds_batch_ext, return_batch_int, value_preds_batch_int = sample
 
             ###############################################################
 
@@ -76,7 +70,7 @@ class MetaPPO:
 
             # Compute normal value loss
             if self.use_clipped_value_loss:
-                value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
+                value_pred_clipped = value_preds_batch_int + (values - value_preds_batch_int).clamp(-self.clip_param, self.clip_param)
                 value_losses = (values - return_batch_int).pow(2)
                 value_losses_clipped = (value_pred_clipped - return_batch_int).pow(2)
                 value_loss = 0.5 * torch.max(value_losses, value_losses_clipped).mean()
@@ -97,11 +91,13 @@ class MetaPPO:
 
             # META STUFF ##################################################
 
+            meta_values = self.actor_critic.get_extrinsic_value(obs_batch, recurrent_hidden_states_batch, masks_batch)
+
             _, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                 obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
             # compute extrinsic adv
-            adv_targ = return_batch - meta_values
+            adv_targ = return_batch_ext - meta_values
             adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
 
             # Compute meta action loss
@@ -112,12 +108,12 @@ class MetaPPO:
 
             # Compute meta value loss
             if self.use_clipped_value_loss:
-                value_pred_clipped = value_preds_batch_int + (meta_values - value_preds_batch_int).clamp(-self.clip_param, self.clip_param)
-                value_losses = (meta_values - return_batch_int).pow(2)
-                value_losses_clipped = (value_pred_clipped - return_batch_int).pow(2)
+                value_pred_clipped = value_preds_batch_ext + (meta_values - value_preds_batch_ext).clamp(-self.clip_param, self.clip_param)
+                value_losses = (meta_values - value_preds_batch_ext).pow(2)
+                value_losses_clipped = (value_pred_clipped - return_batch_ext).pow(2)
                 meta_value_loss = 0.5 * torch.max(value_losses, value_losses_clipped).mean()
             else:
-                meta_value_loss = 0.5 * (return_batch - meta_values).pow(2).mean()
+                meta_value_loss = 0.5 * (return_batch_ext - meta_values).pow(2).mean()
 
             # Compute meta loss
             # The entropy is already accounted for in the other loss
@@ -167,9 +163,9 @@ def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda):
         next_extrinsic_value = actor_critic.get_extrinsic_value(
             rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
 
-    rollouts.compute_returns(next_extrinsic_value, use_gae, gamma, gae_lambda)
+    rollouts.compute_returns_extrinsic(next_extrinsic_value, use_gae, gamma, gae_lambda)
 
-    value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts, gamma)
+    value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts)
     rollouts.after_update()
 
     return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
