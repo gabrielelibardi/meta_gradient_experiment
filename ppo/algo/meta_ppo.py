@@ -16,7 +16,7 @@ class MetaPPO:
                  entropy_coef,
                  lr=None,
                  eps=None,
-                 meta_lr=1e-4,
+                 meta_lr=2e-4,
                  max_grad_norm=None,
                  use_clipped_value_loss=True):
 
@@ -81,7 +81,8 @@ class MetaPPO:
             loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
 
             # Normal backward pass
-            loss.backward(retain_graph=True)
+            # loss.backward(retain_graph=True)
+            loss.backward()
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
             self.optimizer.step()
 
@@ -141,7 +142,7 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
             intrinsic_value, extrinsic_value, action, action_log_prob, recurrent_hidden_states, _ = actor_critic.act(
                 rollouts.get_obs(step), rollouts.recurrent_hidden_states[step], rollouts.masks[step], deterministic=det)
 
-        # Obser reward and next obs
+        # Obs reward and next obs
         obs, reward, done, infos = envs.step(action)
         
         # If done then clean the history of observations.

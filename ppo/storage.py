@@ -97,7 +97,7 @@ class RolloutStorage(object):
                 gamma * self.masks[step + 1] + rewards[step]
 
     def compute_returns_extrinsic(self, next_value, gamma, gae_lambda, use_gae):
-        
+
         if use_gae:
             gae = 0
             self.value_preds_extrinsic[-1] = next_value
