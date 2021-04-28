@@ -43,10 +43,6 @@ class MetaPPO:
 
         for e in range(self.ppo_epoch):
 
-            # Clean grads from previous iteration in both optimizers
-            self.optimizer.zero_grad()
-            self.meta_optimizer.zero_grad()
-
             sample = rollouts.feed_forward_generator()
 
             obs_batch, recurrent_hidden_states_batch, actions_batch, \
@@ -54,6 +50,10 @@ class MetaPPO:
             value_preds_batch_ext, return_batch_int, value_preds_batch_int = sample
 
             ###############################################################
+
+            # Clean grads from previous iteration in both optimizers
+            self.optimizer.zero_grad()
+            self.meta_optimizer.zero_grad()
 
             values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                 obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
@@ -153,13 +153,13 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
 
 def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda):
 
-    # Extrinsic returns
+    # Intrinsic returns
     with torch.no_grad():
         next_intrinsic_value = actor_critic.get_intrinsic_value(
             rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
     rollouts.compute_returns_intrinsic(next_intrinsic_value, actor_critic, gamma, gae_lambda, use_gae)
 
-    # Intrinsic returns
+    # Extrinsic returns
     with torch.no_grad():
         next_extrinsic_value = actor_critic.get_extrinsic_value(
             rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
