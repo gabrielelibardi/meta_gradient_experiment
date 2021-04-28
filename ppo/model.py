@@ -64,7 +64,7 @@ class MetaPolicy(nn.Module):
 
     def act(self, inputs, rnn_hxs, masks, deterministic=False):
 
-        value, actor_features = self.base(inputs)
+        intrinsic_value, actor_features = self.base(inputs)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -74,12 +74,16 @@ class MetaPolicy(nn.Module):
 
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
+        extrinsic_value = self.meta_net.predict_values(inputs)
 
-        return value, action, action_log_probs, rnn_hxs, dist_entropy
+        return intrinsic_value, extrinsic_value, action, action_log_probs, rnn_hxs, dist_entropy
 
-    def get_value(self, inputs, rnn_hxs, masks):
+    def get_intrinsic_value(self, inputs, rnn_hxs, masks):
         value, _ = self.base(inputs)
         return value
+
+    def get_extrinsic_value(self, inputs, rnn_hxs, masks):
+        return self.meta_net.predict_values(inputs)
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
 
@@ -98,8 +102,8 @@ class MetaPolicy(nn.Module):
         action_probs = dist.probs
         return action_probs
 
-    def predict_intrinsic_returns(self, inputs, actions):
-        return self.meta_net.predict_returns(inputs, actions)
+    def predict_intrinsic_rewards(self, inputs, actions):
+        return self.meta_net.predict_rewards(inputs, actions)
 
     def predict_intrinsic_values(self, inputs):
         return self.meta_net.predict_valus(inputs)
@@ -155,9 +159,9 @@ class MetaMLP(nn.Module):
 
         self.train()
 
-    def predict_returns(self, inputs, actions):
+    def predict_rewards(self, inputs, actions):
         return self.meta_reward(torch.cat([inputs, actions.float()], dim=-1))
 
-    def predict_valus(self, inputs):
+    def predict_values(self, inputs):
         return self.meta_critic(inputs)
 

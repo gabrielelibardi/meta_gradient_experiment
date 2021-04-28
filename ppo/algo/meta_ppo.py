@@ -47,7 +47,6 @@ class MetaPPO:
             self.optimizer.zero_grad()
             self.meta_optimizer.zero_grad()
 
-            rollouts.compute_returns_intrinsic(self.actor_critic, gamma)
             sample = rollouts.feed_forward_generator()
 
             obs_batch, recurrent_hidden_states_batch, actions_batch, \
@@ -143,7 +142,7 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
     for step in range(num_steps):
         # Sample actions
         with torch.no_grad():
-            value, action, action_log_prob, recurrent_hidden_states, _ = actor_critic.act(
+            intrinsic_value, extrinsic_value, action, action_log_prob, recurrent_hidden_states, _ = actor_critic.act(
                 rollouts.get_obs(step), rollouts.recurrent_hidden_states[step], rollouts.masks[step], deterministic=det)
 
         # Obser reward and next obs
@@ -153,16 +152,23 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
         masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
         bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
 
-        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, bad_masks)
+        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, intrinsic_value, extrinsic_value, reward, masks, bad_masks)
 
 
 def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda):
-    
+
     with torch.no_grad():
-        next_value = actor_critic.get_value(
+        next_intrinsic_value = actor_critic.get_intrinsic_value(
             rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
 
-    rollouts.compute_returns(next_value, use_gae, gamma, gae_lambda)
+    rollouts.compute_returns_intrinsic(next_intrinsic_value, actor_critic, gamma)
+
+    with torch.no_grad():
+        next_extrinsic_value = actor_critic.get_extrinsic_value(
+            rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
+
+    rollouts.compute_returns(next_extrinsic_value, use_gae, gamma, gae_lambda)
+
     value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts, gamma)
     rollouts.after_update()
 
