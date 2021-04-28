@@ -78,24 +78,30 @@ class RolloutStorage(object):
         self.masks[0].copy_(self.masks[-1])
         self.bad_masks[0].copy_(self.bad_masks[-1])
 
-    def compute_returns_intrinsic(self, next_value, meta_policy, gamma):
+    def compute_returns_intrinsic(self, next_value, meta_policy, gamma, gae_lambda, use_gae):
 
         self.returns_intrinsic = torch.zeros_like(self.returns_extrinsic)
-        self.returns_intrinsic[-1] = next_value
-        # self.returns_intrinsic[-1] = meta_policy.predict_intrinsic_values(self.obs[-1])
-
         rewards = meta_policy.predict_intrinsic_rewards(self.obs[:-1], self.actions)
-        for step in reversed(range(rewards.size(0))):
-            self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
+
+        if use_gae:
+            gae = 0
+            self.value_preds_intrinsic[-1] = next_value
+            for step in reversed(range(rewards.size(0))):
+                delta = rewards[step] + gamma * self.value_preds_intrinsic[step + 1] * self.masks[step + 1] - self.value_preds_intrinsic[step]
+                gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
+                self.returns_intrinsic[step] = gae + self.value_preds_intrinsic[step]
+        else:
+            self.returns_intrinsic[-1] = next_value
+            for step in reversed(range(rewards.size(0))):
+                self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
                 gamma * self.masks[step + 1] + rewards[step]
 
-    def compute_returns_extrinsic(self, next_value, use_gae, gamma, gae_lambda):
+    def compute_returns_extrinsic(self, next_value, gamma, gae_lambda, use_gae):
         if use_gae:
             gae = 0
             self.value_preds_extrinsic[-1] = next_value
             for step in reversed(range(self.rewards_extrinsic.size(0))):
-                delta = self.rewards_extrinsic[step] + gamma * self.value_preds_extrinsic[step + 1] \
-                    * self.masks[step + 1] - self.value_preds_extrinsic[step]
+                delta = self.rewards_extrinsic[step] + gamma * self.value_preds_extrinsic[step + 1] * self.masks[step + 1] - self.value_preds_extrinsic[step]
                 gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
                 self.returns_extrinsic[step] = gae + self.value_preds_extrinsic[step]
 
@@ -130,5 +136,3 @@ class RolloutStorage(object):
             return obs_batch, recurrent_hidden_states_batch, actions_batch, \
                    return_batch_ext, masks_batch, old_action_log_probs_batch, \
                    value_preds_batch_ext, return_batch_int, value_preds_batch_int
-
-

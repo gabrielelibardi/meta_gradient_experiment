@@ -153,17 +153,17 @@ def ppo_rollout(num_steps, envs, actor_critic, rollouts, det=False):
 
 def ppo_update(agent, actor_critic, rollouts, use_gae, gamma, gae_lambda):
 
+    # Extrinsic returns
     with torch.no_grad():
         next_intrinsic_value = actor_critic.get_intrinsic_value(
             rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
+    rollouts.compute_returns_intrinsic(next_intrinsic_value, actor_critic, gamma, gae_lambda, use_gae)
 
-    rollouts.compute_returns_intrinsic(next_intrinsic_value, actor_critic, gamma)
-
+    # Intrinsic returns
     with torch.no_grad():
         next_extrinsic_value = actor_critic.get_extrinsic_value(
             rollouts.get_obs(-1), rollouts.recurrent_hidden_states[-1], rollouts.masks[-1]).detach()
-
-    rollouts.compute_returns_extrinsic(next_extrinsic_value, use_gae, gamma, gae_lambda)
+    rollouts.compute_returns_extrinsic(next_extrinsic_value, gamma, gae_lambda, use_gae)
 
     value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss = agent.update(rollouts)
     rollouts.after_update()
