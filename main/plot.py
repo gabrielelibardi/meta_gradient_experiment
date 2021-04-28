@@ -12,37 +12,19 @@ def plot(experiment_path, roll=50, save_name="results"):
 
     fig = plt.figure(figsize=(20, 10))
 
-    if len(glob(os.path.join(experiment_path, "train/*monitor*"))) != 0:
+    if len(glob(os.path.join(experiment_path, "*monitor*"))) != 0:
 
         exps = glob(experiment_path)
         print(exps)
 
-        df_train = load_results(os.path.join(experiment_path, "train"))
+        df_train = load_results(experiment_path)
         df_train['steps'] = df_train['l'].cumsum() / 1000000
         df_train['time'] = df_train['t'] / 3600
 
         ax = plt.subplot(1, 1, 1)
         df_train.rolling(roll).mean().plot('steps', 'r',  style='-',  ax=ax,  legend=False)
 
-    if len(glob(os.path.join(experiment_path, "test/*monitor*"))) != 0:
-
-        exps = glob(experiment_path)
-        print(exps)
-
-        df_test = load_results(os.path.join(experiment_path, "test"))
-        df_test['steps'] = df_test['l'].cumsum() / 1000000
-        df_test['time'] = df_test['t'] / 3600
-
-        # Map test steps with corresponding number of training steps
-        df_test["steps"] = df_test["steps"].map(
-            lambda a: df_train["steps"][np.argmin(abs(df_test["time"][df_test["steps"].index[
-                df_test["steps"] == a]].to_numpy() - df_train["time"]))])
-
-        ax = plt.subplot(1, 1, 1)
-        df_test.rolling(roll).mean().plot('steps', 'r', style='-', ax=ax, legend=False)
-
-    fig.legend(["train", "test"], loc="lower center", ncol=2)
-    ax.set_title(args.env_id)
+    fig.legend(["train"], loc="lower center", ncol=2)
     ax.set_xlabel('Num steps (M)')
     ax.set_ylabel('Reward')
     ax.grid(True)
@@ -68,7 +50,7 @@ def get_args():
         help='plot save name (default: results)')
 
     args = parser.parse_args()
-    args.log_dir = "/home/abou/meta_gradient_experiment/RUNS/exp_test_ll"
+    args.log_dir = "/home/abou/meta_gradient_experiment/RUNS/exp_test_ll/"
     args.log_dir = os.path.expanduser(args.log_dir)
 
     return args
