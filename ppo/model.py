@@ -98,10 +98,11 @@ class MetaPolicy(nn.Module):
         action_probs = dist.probs
         return action_probs
 
-    def predict_intrinsic(self, inputs, actions):
-        int_rews, int_vals = self.meta_net(inputs, actions)
+    def predict_intrinsic_returns(self, inputs, actions):
+        return self.meta_net.predict_returns(inputs, actions)
 
-        return int_rews, int_vals
+    def predict_intrinsic_values(self, inputs):
+        return self.meta_net.predict_valus(inputs)
 
 
 class PolicyMLP(nn.Module):
@@ -154,8 +155,9 @@ class MetaMLP(nn.Module):
 
         self.train()
 
-    def forward(self, inputs, actions, *args):
-        rews = self.meta_reward(torch.cat([inputs, actions.float()], dim=-1))
-        vals = self.meta_critic(inputs)
+    def predict_returns(self, inputs, actions):
+        return self.meta_reward(torch.cat([inputs, actions.float()], dim=-1))
 
-        return rews, vals
+    def predict_valus(self, inputs):
+        return self.meta_critic(inputs)
+

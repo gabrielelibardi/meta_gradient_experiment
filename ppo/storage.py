@@ -14,10 +14,8 @@ class RolloutStorage(object):
         self.recurrent_hidden_states = torch.zeros(num_steps + 1, num_processes, recurrent_hidden_state_size)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.rewards_intrinsic = torch.zeros(num_steps, num_processes, 1)
-        self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
         self.value_preds_intrinsic = torch.zeros(num_steps + 1, num_processes, 1)
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
-        # self.returns_intrinsic = torch.zeros(num_steps + 1, num_processes, 1)
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
 
         if action_space.__class__.__name__ == 'Discrete':
@@ -49,7 +47,6 @@ class RolloutStorage(object):
         self.obs = self.obs.to(device)
         self.recurrent_hidden_states = self.recurrent_hidden_states.to(device)
         self.rewards = self.rewards.to(device)
-        self.value_preds = self.value_preds.to(device)
         self.returns = self.returns.to(device)
         self.action_log_probs = self.action_log_probs.to(device)
         self.actions = self.actions.to(device)
@@ -57,7 +54,6 @@ class RolloutStorage(object):
         self.bad_masks = self.bad_masks.to(device)
         self.rewards_intrinsic = self.rewards_intrinsic.to(device)
         self.value_preds_intrinsic = self.value_preds_intrinsic.to(device)
-        # self.returns_intrinsic = self.returns_intrinsic.to(device)
 
     def insert(self, obs, recurrent_hidden_states, actions, action_log_probs,
                value_preds, rewards, masks, bad_masks):
@@ -80,13 +76,14 @@ class RolloutStorage(object):
 
     def compute_returns_intrinsic(self, meta_policy, gamma):
 
-        rewards, _ = meta_policy.predict_intrinsic(self.obs[:-1], self.actions)
-        next_return = meta_policy.meta_net.meta_critic(self.obs[-1])
-        rewards_intrinsic = torch.cat([rewards, next_return.unsqueeze(0)])
-
-        for step in reversed(range(self.rewards_intrinsic.size(0) - 1)):
+        self.returns_intrinsic = torch.zeros_like(self.returns)
+        rewards, value_preds = meta_policy.predict_intrinsic_returns(self.obs[:-1], self.actions)
+        self.returns_intrinsic[-1] = meta_policy.meta_net.meta_critic(self.obs[-1])
+        for step in reversed(range(rewards.size(0))):
             self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
-                gamma * self.masks[step + 1] + rewards_intrinsic[step]
+                gamma * self.masks[step + 1] + rewards[step]
+
+        self.value_preds_extrinsic = meta_policy.predict_intrinsic_values(self.obs[:-1])
 
     def compute_returns(self, next_value, use_gae, gamma, gae_lambda):
         if use_gae:
@@ -122,12 +119,9 @@ class RolloutStorage(object):
             return_batch = self.returns[:-1].view(-1, 1)[indices]
             masks_batch = self.masks[:-1].view(-1, 1)[indices]
             old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
-            value_preds_batch = self.value_preds[:-1].view(-1, 1)[indices]
+            value_preds_batch = self.value_preds_extrinsic[:-1].view(-1, 1)[indices]
             value_preds_batch_int = self.value_preds_intrinsic[:-1].view(-1, 1)[indices]
-
-            import ipdb; ipdb.set_trace()
             return_batch_int = self.returns_intrinsic[:-1].view(-1, 1)[indices]
-
 
             return obs_batch, recurrent_hidden_states_batch, actions_batch,\
                    return_batch, masks_batch, old_action_log_probs_batch,\
