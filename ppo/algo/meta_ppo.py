@@ -58,7 +58,8 @@ class MetaPPO:
                 rewards_int = self.actor_critic.predict_intrinsic_rewards(rollouts.obs[:-1].view(-1, *rollouts.obs.size()[2:]), rollouts.actions.view(-1, rollouts.actions.size(-1)))
                 delta = rewards_int + TD_batch                                                                           
                 adv_targ_int = torch.matmul(coef_mat, delta) 
-                return_batch_int =  adv_targ_int + value_preds_batch_int                                                    
+                return_batch_int =  adv_targ_int + value_preds_batch_int
+
                 ###############################################################
 
                 # Clean grads from previous iteration in both optimizers
@@ -67,7 +68,6 @@ class MetaPPO:
 
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
-
 
                 # Compute normal action loss
                 ratio = torch.exp(action_log_probs - old_action_log_probs_batch)

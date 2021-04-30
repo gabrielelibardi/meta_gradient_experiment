@@ -1,3 +1,5 @@
+
+import multiprocessing
 import torch
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
@@ -10,13 +12,15 @@ class RolloutStorage(object):
     def __init__(self, num_steps, num_processes, obs, action_space,
                  recurrent_hidden_state_size):
         if isinstance(obs,tuple):
-            obs_shape = obs[0].shape[1:] #0 is for num_procs
+            obs_shape = obs[0].shape[1:] # 0 is for num_procs
             states_size = obs[1].shape[1:]
             self.has_states = True
         else:
             obs_shape = obs.shape[1:]
             states_size = (0,)
             self.has_states = False
+
+        self.batches = []
         self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
         self.recurrent_hidden_states = torch.zeros( num_steps + 1, num_processes, recurrent_hidden_state_size)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
@@ -129,7 +133,8 @@ class RolloutStorage(object):
                                advantages,
                                num_mini_batch=None,
                                mini_batch_size=None):
-      
+
+        self.advantages = advantages
         num_steps, num_processes = self.rewards.size()[0:2]
         batch_size = num_processes * num_steps
 
@@ -140,7 +145,6 @@ class RolloutStorage(object):
                 "to be greater than or equal to the number of PPO mini batches ({})."
                 "".format(num_processes, num_steps, num_processes * num_steps,
                           num_mini_batch))
-            
             mini_batch_size = batch_size // num_mini_batch
 
         sampler = BatchSampler(
@@ -148,31 +152,54 @@ class RolloutStorage(object):
             mini_batch_size,
             drop_last=True)
 
+        num_workers = multiprocessing.cpu_count()  #detect number of cores
+        pool = multiprocessing.Pool(num_workers)
+
+        # multiprocessing
         for indices in sampler:
-            obs_batch = self.obs[:-1].view(-1, *self.obs.size()[2:])[indices]
-            recurrent_hidden_states_batch = self.recurrent_hidden_states[:-1].view(-1, self.recurrent_hidden_states.size(-1))[indices]
-            actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
-            masks_batch = self.masks[:-1].view(-1, 1)[indices]
-            old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
-            value_preds_batch_ext = self.value_preds_extrinsic[:-1].view(-1, 1)[indices]
-            value_preds_batch_int = self.value_preds_intrinsic[:-1].view(-1, 1)[indices]
-            return_batch = self.returns[:-1].view(-1, 1)[indices]
-            TD_batch = self.delta.view(-1, 1)
-            adv_targ = advantages.view(-1, 1)[indices]
-            
-            # COMPUTE COEF MATRIX
-            GAMM = 0.99
-            LAMB = 0.95
-            coef_mat = torch.zeros([mini_batch_size, batch_size]).to(return_batch.device) 
+            result = pool.apply_async(
+                self.prepare_batch,
+                args=(mini_batch_size, indices),
+                callback=self.mycallback)
 
-            for i in range(mini_batch_size):
-                coef = 1.0
-                for j in range(indices[i], batch_size):
-                    if j > indices[i] and (self.masks[:-1].view(-1, 1)[j] == 0.0 or j % num_steps == 0):
-                        break
-                    coef_mat[i][j] = coef
-                    coef *= GAMM * LAMB
+        pool.close()  # not going to add anything else to the pool
+        pool.join()  # wait for the processes to terminate
 
-            yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                   return_batch, masks_batch, old_action_log_probs_batch, \
-                   value_preds_batch_ext, value_preds_batch_int, adv_targ, TD_batch, coef_mat
+        for batch in self.batches:
+            yield batch
+
+    def prepare_batch(self, mini_batch_size, indices):
+
+        num_steps, num_processes = self.rewards.size()[0:2]
+        batch_size = num_processes * num_steps
+
+        obs_batch = self.obs[:-1].view(-1, *self.obs.size()[2:])[indices]
+        recurrent_hidden_states_batch = self.recurrent_hidden_states[:-1].view(-1,self.recurrent_hidden_states.size(-1))[indices]
+        actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
+        masks_batch = self.masks[:-1].view(-1, 1)[indices]
+        old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
+        value_preds_batch_ext = self.value_preds_extrinsic[:-1].view(-1, 1)[indices]
+        value_preds_batch_int = self.value_preds_intrinsic[:-1].view(-1, 1)[indices]
+        return_batch = self.returns[:-1].view(-1, 1)[indices]
+        TD_batch = self.delta.view(-1, 1).clone()
+        adv_targ = self.advantages.view(-1, 1)[indices]
+
+        # COMPUTE COEF MATRIX
+        GAMM = 0.99
+        LAMB = 0.95
+        coef_mat = torch.zeros([mini_batch_size, batch_size]).to(return_batch.device)
+
+        for i in range(mini_batch_size):
+            coef = 1.0
+            for j in range(indices[i], batch_size):
+                if j > indices[i] and (self.masks[:-1].view(-1, 1)[j] == 0.0 or j % num_steps == 0):
+                    break
+                coef_mat[i][j] = coef
+                coef *= GAMM * LAMB
+
+        return (obs_batch, recurrent_hidden_states_batch, actions_batch, \
+              return_batch, masks_batch, old_action_log_probs_batch, \
+              value_preds_batch_ext, value_preds_batch_int, adv_targ, TD_batch, coef_mat)
+
+    def mycallback(self, x):
+        self.batches.append(x)
