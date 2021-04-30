@@ -7,55 +7,69 @@ def _flatten_helper(T, N, _tensor):
 
 
 class RolloutStorage(object):
-    def __init__(self, num_steps, num_processes, obs, action_space, recurrent_hidden_state_size):
-
-        obs_shape = obs.shape[1:]
+    def __init__(self, num_steps, num_processes, obs, action_space,
+                 recurrent_hidden_state_size):
+        if isinstance(obs,tuple):
+            obs_shape = obs[0].shape[1:] #0 is for num_procs
+            states_size = obs[1].shape[1:]
+            self.has_states = True
+        else:
+            obs_shape = obs.shape[1:]
+            states_size = (0,)
+            self.has_states = False
         self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
-        self.recurrent_hidden_states = torch.zeros(num_steps + 1, num_processes, recurrent_hidden_state_size)
-        self.rewards_extrinsic = torch.zeros(num_steps, num_processes, 1)
-        self.rewards_intrinsic = torch.zeros(num_steps, num_processes, 1)
+        self.recurrent_hidden_states = torch.zeros( num_steps + 1, num_processes, recurrent_hidden_state_size)
+        self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.value_preds_intrinsic = torch.zeros(num_steps + 1, num_processes, 1)
         self.value_preds_extrinsic = torch.zeros(num_steps + 1, num_processes, 1)
-        self.returns_extrinsic = torch.zeros(num_steps + 1, num_processes, 1)
+        self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
-
         if action_space.__class__.__name__ == 'Discrete':
             action_shape = 1
         else:
             action_shape = action_space.shape[0]
-
         self.actions = torch.zeros(num_steps, num_processes, action_shape)
-
         if action_space.__class__.__name__ == 'Discrete':
             self.actions = self.actions.long()
-
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
+        self.delta = torch.zeros(num_steps, num_processes, 1)
 
         # Masks that indicate whether it's a true terminal state
         # or time limit end state
         self.bad_masks = torch.ones(num_steps + 1, num_processes, 1)
+        self.states = torch.zeros(num_steps + 1, num_processes, *states_size)
         self.num_steps = num_steps
         self.step = 0
-        self.set_obs(0, obs)
+        self.set_obs(0,obs)
 
     def set_obs(self, step, obs):
-        self.obs[step].copy_(obs)
-
+        if isinstance(obs,tuple):
+            self.obs[step].copy_(obs[0])
+            self.states[step].copy_(obs[1])
+        else:
+            self.obs[step].copy_(obs)
+    
     def get_obs(self, i):
-        return self.obs[i]
+        if self.has_states:
+            return (self.obs[i],self.states[i])
+        else:
+            return self.obs[i]
 
     def to(self, device):
         self.obs = self.obs.to(device)
         self.recurrent_hidden_states = self.recurrent_hidden_states.to(device)
-        self.rewards_extrinsic = self.rewards_extrinsic.to(device)
-        self.returns_extrinsic = self.returns_extrinsic.to(device)
+        self.rewards = self.rewards.to(device)
+        self.value_preds_intrinsic = self.value_preds_intrinsic.to(device)
+        self.value_preds_extrinsic = self.value_preds_extrinsic.to(device)
+        self.returns = self.returns.to(device)
         self.action_log_probs = self.action_log_probs.to(device)
         self.actions = self.actions.to(device)
         self.masks = self.masks.to(device)
         self.bad_masks = self.bad_masks.to(device)
-        self.rewards_intrinsic = self.rewards_intrinsic.to(device)
-        self.value_preds_intrinsic = self.value_preds_intrinsic.to(device)
-        self.value_preds_extrinsic = self.value_preds_extrinsic.to(device)
+        self.states = self.states.to(device)
+        self.delta = self.delta.to(device)
+
+
 
     def insert(self, obs, recurrent_hidden_states, actions, action_log_probs,
                value_preds_int, value_preds_ext, rewards, masks, bad_masks):
@@ -66,7 +80,7 @@ class RolloutStorage(object):
         self.action_log_probs[self.step].copy_(action_log_probs)
         self.value_preds_intrinsic[self.step].copy_(value_preds_int)
         self.value_preds_extrinsic[self.step].copy_(value_preds_ext)
-        self.rewards_intrinsic[self.step].copy_(rewards)
+        self.rewards[self.step].copy_(rewards)
         self.masks[self.step + 1].copy_(masks)
         self.bad_masks[self.step + 1].copy_(bad_masks)
 
@@ -77,51 +91,61 @@ class RolloutStorage(object):
         self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
         self.masks[0].copy_(self.masks[-1])
         self.bad_masks[0].copy_(self.bad_masks[-1])
+        self.states[0].copy_(self.states[-1])
 
-    def compute_returns_intrinsic(self, next_value, meta_policy, gamma, gae_lambda, use_gae):
 
-        self.returns_intrinsic = torch.zeros_like(self.returns_extrinsic)
-        rewards = meta_policy.predict_intrinsic_rewards(self.obs[:-1], self.actions)
+    def compute_returns_extrinsic(self,
+                        next_value,
+                        use_gae,
+                        gamma,
+                        gae_lambda):
 
-        if use_gae:
-            gae = 0
-            self.value_preds_intrinsic[-1] = next_value
-            for step in reversed(range(rewards.size(0))):
-                delta = rewards[step] + gamma * self.value_preds_intrinsic[step + 1] * \
-                    self.masks[step + 1] - self.value_preds_intrinsic[step]
-                gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
-                self.returns_intrinsic[step] = gae + self.value_preds_intrinsic[step]
-        else:
-            self.returns_intrinsic[-1] = next_value
-            for step in reversed(range(rewards.size(0))):
-                self.returns_intrinsic[step] = self.returns_intrinsic[step + 1] * \
-                gamma * self.masks[step + 1] + rewards[step]
 
-    def compute_returns_extrinsic(self, next_value, gamma, gae_lambda, use_gae):
+        self.value_preds_extrinsic[-1] = next_value
+        gae = 0
+        for step in reversed(range(self.rewards.size(0))):
+            delta = self.rewards[step] + gamma * self.value_preds_extrinsic[
+                step + 1] * self.masks[step +
+                                       1] - self.value_preds_extrinsic[step]
+            gae = delta + gamma * gae_lambda * self.masks[step +
+                                                          1] * gae
+            self.returns[step] = gae + self.value_preds_extrinsic[step]
 
-        if use_gae:
-            gae = 0
-            self.value_preds_extrinsic[-1] = next_value
-            for step in reversed(range(self.rewards_extrinsic.size(0))):
-                delta = self.rewards_extrinsic[step] + gamma * self.value_preds_extrinsic[step + 1] * self.masks[step + 1] - self.value_preds_extrinsic[step]
-                gae = delta + gamma * gae_lambda * self.masks[step + 1] * gae
-                self.returns_extrinsic[step] = gae + self.value_preds_extrinsic[step]
+  
+    def compute_deltas(self,
+                        next_value_int,
+                        use_gae,
+                        gamma,
+                        gae_lambda):
 
-        else:
-            self.returns_extrinsic[-1] = next_value
-            for step in reversed(range(self.rewards_extrinsic.size(0))):
-                self.returns_extrinsic[step] = self.returns_extrinsic[step + 1] * \
-                    gamma * self.masks[step + 1] + self.returns_extrinsic[step]
+        self.value_preds_intrinsic[-1] = next_value_int
+        gae = 0
+        for step in reversed(range(self.rewards.size(0))):
 
-    def feed_forward_generator(self):
+            self.delta[step] = gamma * self.value_preds_intrinsic[step + 1] * self.masks[step +1] - self.value_preds_intrinsic[step]
 
-        num_steps, num_processes = self.rewards_extrinsic.size()[0:2]
+                    
+    def feed_forward_generator(self,
+                               advantages,
+                               num_mini_batch=None,
+                               mini_batch_size=None):
+      
+        num_steps, num_processes = self.rewards.size()[0:2]
         batch_size = num_processes * num_steps
 
-        # only 1 batch
+        if mini_batch_size is None:
+            assert batch_size >= num_mini_batch, (
+                "PPO requires the number of processes ({}) "
+                "* number of steps ({}) = {} "
+                "to be greater than or equal to the number of PPO mini batches ({})."
+                "".format(num_processes, num_steps, num_processes * num_steps,
+                          num_mini_batch))
+            
+            mini_batch_size = batch_size // num_mini_batch
+
         sampler = BatchSampler(
             SubsetRandomSampler(range(batch_size)),
-            batch_size,
+            mini_batch_size,
             drop_last=True)
 
         for indices in sampler:
@@ -132,9 +156,23 @@ class RolloutStorage(object):
             old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
             value_preds_batch_ext = self.value_preds_extrinsic[:-1].view(-1, 1)[indices]
             value_preds_batch_int = self.value_preds_intrinsic[:-1].view(-1, 1)[indices]
-            return_batch_ext = self.returns_extrinsic[:-1].view(-1, 1)[indices]
-            return_batch_int = self.returns_intrinsic[:-1].view(-1, 1)[indices]
+            return_batch = self.returns[:-1].view(-1, 1)[indices]
+            TD_batch = self.delta.view(-1, 1)
+            adv_targ = advantages.view(-1, 1)[indices]
+            
+            # COMPUTE COEF MATRIX
+            GAMM = 0.99
+            LAMB = 0.95
+            coef_mat = torch.zeros([mini_batch_size, batch_size]).to(return_batch.device) 
 
-            return obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                   return_batch_ext, masks_batch, old_action_log_probs_batch, \
-                   value_preds_batch_ext, return_batch_int, value_preds_batch_int
+            for i in range(mini_batch_size):
+                coef = 1.0
+                for j in range(indices[i], batch_size):
+                    if j > indices[i] and (self.masks[:-1].view(-1, 1)[j] == 0.0 or j % num_steps == 0):
+                        break
+                    coef_mat[i][j] = coef
+                    coef *= GAMM * LAMB
+
+            yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
+                   return_batch, masks_batch, old_action_log_probs_batch, \
+                   value_preds_batch_ext, value_preds_batch_int, adv_targ, TD_batch, coef_mat
