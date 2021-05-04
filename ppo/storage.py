@@ -154,22 +154,25 @@ class RolloutStorage(object):
 
         num_workers = multiprocessing.cpu_count()  #detect number of cores
         pool = multiprocessing.Pool(num_workers)
-
+        self.batches = []
         # multiprocessing
-        for indices in sampler:
+        """for indices in sampler:
             result = pool.apply_async(
                 self.prepare_batch,
                 args=(mini_batch_size, indices),
-                callback=self.mycallback)
-
+                callback=self.mycallback)"""
+        self.batches = pool.map(self.prepare_batch, [(mini_batch_size, indices) for indices in sampler])
+        
         pool.close()  # not going to add anything else to the pool
         pool.join()  # wait for the processes to terminate
-
+        
+        print('LEN HERE', len(self.batches))
+        #import ipdb; ipdb.set_trace()
         for batch in self.batches:
             yield batch
 
-    def prepare_batch(self, mini_batch_size, indices):
-
+    def prepare_batch(self, args):
+        mini_batch_size, indices = args
         num_steps, num_processes = self.rewards.size()[0:2]
         batch_size = num_processes * num_steps
 
@@ -203,3 +206,4 @@ class RolloutStorage(object):
 
     def mycallback(self, x):
         self.batches.append(x)
+        print('LEN THERE', len(self.batches))

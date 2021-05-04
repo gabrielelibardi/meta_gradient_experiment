@@ -38,11 +38,12 @@ class LossWriter(object):
 def main():
     args = get_args()
     
-
+    
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     torch.set_num_threads(1)
+    torch.multiprocessing.set_start_method('spawn')
 
     device = torch.device(args.device)
     utils.cleanup_log_dir(args.log_dir)
