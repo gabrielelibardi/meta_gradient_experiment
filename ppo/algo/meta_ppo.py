@@ -32,8 +32,8 @@ class MetaPPO:
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
 
-        self.optimizer = optim.Adam(actor_critic.policy.parameters(), lr=lr, eps=eps)
-        self.meta_optimizer = optim.Adam(actor_critic.meta_net.parameters(), lr=meta_lr, eps=eps)
+        self.optimizer = optim.Adam(actor_critic.policy.parameters(), lr=3e-4, eps=eps)
+        self.meta_optimizer = optim.Adam(actor_critic.meta_net.parameters(), lr=1e-4, eps=eps)
 
     def update(self, rollouts):
         
@@ -56,10 +56,13 @@ class MetaPPO:
                 
                 # COMPUTE ADVANTAGES LIKE "SIMULATE GAE"
                 rewards_int = self.actor_critic.predict_intrinsic_rewards(rollouts.obs[:-1].view(-1, *rollouts.obs.size()[2:]), rollouts.actions.view(-1, rollouts.actions.size(-1)))
+                #rewards_int = rollouts.rewards.view(-1,1)
+                
                 delta = rewards_int + TD_batch                                                                           
-                adv_targ_int = torch.matmul(coef_mat, delta) 
+                adv_targ_int = torch.matmul(coef_mat, delta)
                 return_batch_int =  adv_targ_int + value_preds_batch_int
-
+                adv_targ_int = (adv_targ_int - adv_targ_int.mean()) / (adv_targ_int.std() + 1e-5)
+                
                 ###############################################################
 
                 # Clean grads from previous iteration in both optimizers
