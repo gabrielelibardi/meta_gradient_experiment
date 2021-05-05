@@ -92,6 +92,12 @@ class MetaPPO:
 
                 # Normal backward pass
                 loss.backward()
+                for param in self.actor_critic.parameters():
+                    if param.grad is None:
+                        print('ATTENTION! None found')
+                    else:
+                        assert not torch.isnan(param.grad.data).any()
+                    
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
 
@@ -128,6 +134,12 @@ class MetaPPO:
 
                 # Meta backward pass
                 meta_loss.backward()
+                for param in self.actor_critic.parameters():
+                    if param.grad is None:
+                        print('ATTENTION! None found')
+                    else:
+                        assert not torch.isnan(param.grad.data).any()
+                        
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.meta_optimizer.step()
 

@@ -7,7 +7,8 @@ from gym.spaces.box import Box
 from baselines.common.vec_env import VecEnvWrapper
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
-from baselines.common.vec_env.vec_normalize import  VecNormalize as VecNormalize_
+#from baselines.common.vec_env.vec_normalize import  VecNormalize as VecNormalize_
+from baselines.common.vec_env.vec_normalize import  VecNormalize
 
 
 def make_vec_envs(make, num_processes, log_dir, device, num_frame_stack):
@@ -18,7 +19,8 @@ def make_vec_envs(make, num_processes, log_dir, device, num_frame_stack):
         envs = SubprocVecEnv(envs)
     else:
         envs = DummyVecEnv(envs)
-
+    
+    envs = VecNormalize(envs)
     envs = VecPyTorch(envs, device)
 
     if num_frame_stack > 0:
@@ -151,7 +153,7 @@ class TransposeImage(TransposeObs):
     def observation(self, ob):
        return ob.transpose(self.op[0], self.op[1], self.op[2])
 
-class VecNormalize(VecNormalize_):
+"""class VecNormalize(VecNormalize_):
     def __init__(self, *args, **kwargs):
         super(VecNormalize, self).__init__(*args, **kwargs)
         self.training = True
@@ -171,4 +173,4 @@ class VecNormalize(VecNormalize_):
         self.training = True
 
     def eval(self):
-        self.training = False
+        self.training = False"""
