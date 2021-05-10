@@ -109,8 +109,6 @@ class MetaPolicy(nn.Module):
     def predict_intrinsic_rewards(self, inputs, actions):
         return self.meta_net.predict_rewards(inputs, actions)
 
-    def predict_intrinsic_values(self, inputs):
-        return self.meta_net.predict_valus(inputs)
 
 
 class PolicyMLP(nn.Module):
@@ -157,7 +155,7 @@ class MetaMLP(nn.Module):
             init_(nn.Linear(hidden_size, 1)), nn.Tanh())  # added tanh like in paper
 
         self.meta_critic = nn.Sequential(
-            init_(nn.Linear(num_obs_inputs, hidden_size)), nn.ReLU(),
+            init_(nn.Linear(num_obs_inputs, hidden_size)), nn.Tanh(),
             init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh(),
             init_(nn.Linear(hidden_size, 1)))
 

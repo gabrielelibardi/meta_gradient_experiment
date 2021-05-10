@@ -126,7 +126,8 @@ class RolloutStorage(object):
         gae = 0
         for step in reversed(range(self.rewards.size(0))):
 
-            self.delta[step] = gamma * self.value_preds_intrinsic[step + 1] * self.masks[step +1] - self.value_preds_intrinsic[step]
+            self.delta[step] = gamma * self.value_preds_intrinsic[step + 1] - self.value_preds_intrinsic[step]
+            # Took out the mask here carefull
 
                     
     def feed_forward_generator(self,

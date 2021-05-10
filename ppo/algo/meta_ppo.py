@@ -92,7 +92,7 @@ class MetaPPO:
 
                 # Normal backward pass
                 loss.backward()
-                for param in self.actor_critic.parameters():
+                for param in self.actor_critic.policy.parameters():
                     if param.grad is None:
                         print('ATTENTION! None found')
                     else:
@@ -109,12 +109,12 @@ class MetaPPO:
 
                 meta_values = self.actor_critic.get_extrinsic_value(obs_batch, recurrent_hidden_states_batch, masks_batch)
 
-                _, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
+                _, action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
 
                 # Compute meta action loss
-                ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
+                ratio = torch.exp(action_log_probs_new - old_action_log_probs_batch)
                 surr1 = ratio * adv_targ_ext
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_ext
                 meta_action_loss = - torch.min(surr1, surr2).mean()
@@ -134,7 +134,7 @@ class MetaPPO:
 
                 # Meta backward pass
                 meta_loss.backward()
-                for param in self.actor_critic.parameters():
+                for param in self.actor_critic.meta_net.parameters():
                     if param.grad is None:
                         print('ATTENTION! None found')
                     else:
