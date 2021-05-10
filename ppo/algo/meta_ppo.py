@@ -65,10 +65,6 @@ class MetaPPO:
                 
                 ###############################################################
 
-                # Clean grads from previous iteration in both optimizers
-                self.optimizer.zero_grad()
-                self.meta_optimizer.zero_grad()
-
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
@@ -100,6 +96,9 @@ class MetaPPO:
                     
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
+
+                # Clean grads from previous iteration in both optimizers
+                self.optimizer.zero_grad()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
@@ -142,6 +141,9 @@ class MetaPPO:
                         
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.meta_optimizer.step()
+
+                # Clean grads from previous iteration in both optimizers
+                self.meta_optimizer.zero_grad()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
