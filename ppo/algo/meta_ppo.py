@@ -43,6 +43,7 @@ class MetaPPO:
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        
 
         for e in range(self.ppo_epoch):
 
@@ -55,7 +56,9 @@ class MetaPPO:
                 value_preds_batch_ext, value_preds_batch_int, adv_targ_ext, TD_batch, coef_mat = sample
                 
                 # COMPUTE ADVANTAGES LIKE "SIMULATE GAE"
+                
                 rewards_int = self.actor_critic.predict_intrinsic_rewards(rollouts.obs[:-1].view(-1, *rollouts.obs.size()[2:]), rollouts.actions.view(-1, rollouts.actions.size(-1)))
+
                 #rewards_int = rollouts.rewards.view(-1,1)
                 
                 delta = rewards_int + TD_batch                                                                           
@@ -64,6 +67,10 @@ class MetaPPO:
                 adv_targ_int = (adv_targ_int - adv_targ_int.mean()) / (adv_targ_int.std() + 1e-5)
                 
                 ###############################################################
+
+                # Clean grads from previous iteration in both optimizers
+                
+                
 
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
@@ -96,8 +103,7 @@ class MetaPPO:
                     
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
-
-                # Clean grads from previous iteration in both optimizers
+                
                 self.optimizer.zero_grad()
 
                 value_loss_epoch += value_loss.item()
@@ -141,8 +147,7 @@ class MetaPPO:
                         
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.meta_optimizer.step()
-
-                # Clean grads from previous iteration in both optimizers
+                
                 self.meta_optimizer.zero_grad()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
