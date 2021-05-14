@@ -124,9 +124,8 @@ class RolloutStorage(object):
 
         self.value_preds_intrinsic[-1] = next_value_int
         gae = 0
-        for step in reversed(range(self.rewards.size(0))):
-
-            self.delta[step] = gamma * self.value_preds_intrinsic[step + 1] - self.value_preds_intrinsic[step]
+        #for step in reversed(range(self.rewards.size(0))):
+        self.delta = gamma * self.value_preds_intrinsic[1:]*self.masks[1:] - self.value_preds_intrinsic[:-1]
             # Took out the mask here carefull
 
                     
