@@ -153,24 +153,24 @@ class RolloutStorage(object):
             mini_batch_size,
             drop_last=True)
 
-        num_workers = multiprocessing.cpu_count()  #detect number of cores
-        pool = multiprocessing.Pool(num_workers)
-        self.batches = []
+        #num_workers = multiprocessing.cpu_count()  #detect number of cores
+        #pool = multiprocessing.Pool(num_workers)
+        #self.batches = []
         # multiprocessing
         """for indices in sampler:
             result = pool.apply_async(
                 self.prepare_batch,
                 args=(mini_batch_size, indices),
                 callback=self.mycallback)"""
-        self.batches = pool.map(self.prepare_batch, [(mini_batch_size, indices) for indices in sampler])
+        #self.batches = pool.map(self.prepare_batch, [(mini_batch_size, indices) for indices in sampler])
         
-        pool.close()  # not going to add anything else to the pool
-        pool.join()  # wait for the processes to terminate
+        #pool.close()  # not going to add anything else to the pool
+        #pool.join()  # wait for the processes to terminate
+        # LETS NOT DO MULTIIPROCESSING FOR NOW
         
-        print('LEN HERE', len(self.batches))
-        #import ipdb; ipdb.set_trace()
-        for batch in self.batches:
-            yield batch
+
+        for indices in sampler:
+            yield self.prepare_batch((mini_batch_size, indices))
 
     def prepare_batch(self, args):
         mini_batch_size, indices = args
@@ -187,12 +187,43 @@ class RolloutStorage(object):
         return_batch = self.returns[:-1].view(-1, 1)[indices]
         TD_batch = self.delta.view(-1, 1).clone()
         adv_targ = self.advantages.view(-1, 1)[indices]
-
+        ####### DUMMY VARIABLES TESTING ######
+        
+        import pickle
+        def loadall(filename):
+            result = []
+            with open(filename, "rb") as f:
+                while True:
+                    try:
+                        result.append(pickle.load(f))
+                    except EOFError:
+                        break
+            return result
+        
+        def dump_list(list2dump, mydir):
+            with open(mydir, "wb") as f:
+                for element in list2dump:
+                    pickle.dump(element, f)
+        
+      
+        items = loadall('/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data.dat')
+        obs, masks, actions, neglogpacs, r_ex, r_in, ret_ex, v_ex, v_mix, td_mix, inds =  items
+        
+        self.masks = torch.Tensor(masks).unsqueeze(-1)
+        self.masks.to(adv_targ.device)
+        mini_batch_size
+        indices = inds.tolist()[0:mini_batch_size]
+        
+        #####################################
+        
+        #print(indices)
         # COMPUTE COEF MATRIX
         GAMM = 0.99
         LAMB = 0.95
+        import time
+        start = time.time()
         coef_mat = torch.zeros([mini_batch_size, batch_size]).to(return_batch.device)
-
+        
         for i in range(mini_batch_size):
             coef = 1.0
             for j in range(indices[i], batch_size):
@@ -200,7 +231,9 @@ class RolloutStorage(object):
                     break
                 coef_mat[i][j] = coef
                 coef *= GAMM * LAMB
-
+        print(time.time()-start) 
+        dump_list([coef_mat.cpu().detach().numpy()], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
+        import ipdb; ipdb.set_trace()
         return (obs_batch, recurrent_hidden_states_batch, actions_batch, \
               return_batch, masks_batch, old_action_log_probs_batch, \
               value_preds_batch_ext, value_preds_batch_int, adv_targ, TD_batch, coef_mat)
