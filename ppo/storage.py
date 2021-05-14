@@ -1,4 +1,4 @@
-
+import numpy as np
 import multiprocessing
 import torch
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
@@ -153,24 +153,9 @@ class RolloutStorage(object):
             mini_batch_size,
             drop_last=True)
 
-        num_workers = multiprocessing.cpu_count()  #detect number of cores
-        pool = multiprocessing.Pool(num_workers)
-        self.batches = []
-        # multiprocessing
-        """for indices in sampler:
-            result = pool.apply_async(
-                self.prepare_batch,
-                args=(mini_batch_size, indices),
-                callback=self.mycallback)"""
-        self.batches = pool.map(self.prepare_batch, [(mini_batch_size, indices) for indices in sampler])
-        
-        pool.close()  # not going to add anything else to the pool
-        pool.join()  # wait for the processes to terminate
-        
-        print('LEN HERE', len(self.batches))
-        #import ipdb; ipdb.set_trace()
-        for batch in self.batches:
-            yield batch
+
+        for indices in sampler:
+            yield self.prepare_batch((mini_batch_size, indices))
 
     def prepare_batch(self, args):
         mini_batch_size, indices = args
@@ -191,16 +176,18 @@ class RolloutStorage(object):
         # COMPUTE COEF MATRIX
         GAMM = 0.99
         LAMB = 0.95
-        coef_mat = torch.zeros([mini_batch_size, batch_size]).to(return_batch.device)
+        # COMPUTE IN NUMPY, IT IS FASTER
+        coef_mat = np.zeros([mini_batch_size, batch_size], "float32")
+        masks = self.masks.view(-1, 1)[:-1].cpu().detach().numpy()
 
         for i in range(mini_batch_size):
             coef = 1.0
             for j in range(indices[i], batch_size):
-                if j > indices[i] and (self.masks[:-1].view(-1, 1)[j] == 0.0 or j % num_steps == 0):
+                if j > indices[i] and (not masks[j] or j % num_steps == 0):
                     break
                 coef_mat[i][j] = coef
                 coef *= GAMM * LAMB
-
+        coef_mat = torch.Tensor(coef_mat).to(self.masks.device)
         return (obs_batch, recurrent_hidden_states_batch, actions_batch, \
               return_batch, masks_batch, old_action_log_probs_batch, \
               value_preds_batch_ext, value_preds_batch_int, adv_targ, TD_batch, coef_mat)
