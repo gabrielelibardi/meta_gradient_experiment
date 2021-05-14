@@ -208,7 +208,7 @@ class RolloutStorage(object):
       
         items = loadall('/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data.dat')
         obs, masks, actions, neglogpacs, r_ex, r_in, ret_ex, v_ex, v_mix, td_mix, inds =  items
-        
+        masks = 1 - masks
         self.masks = torch.Tensor(masks).unsqueeze(-1)
         self.masks.to(adv_targ.device)
         mini_batch_size
@@ -227,7 +227,7 @@ class RolloutStorage(object):
         for i in range(mini_batch_size):
             coef = 1.0
             for j in range(indices[i], batch_size):
-                if j > indices[i] and (self.masks[:-1].view(-1, 1)[j] == 0.0 or j % num_steps == 0):
+                if j > indices[i] and (self.masks.view(-1, 1)[j] == 0.0 or j % num_steps == 0):
                     break
                 coef_mat[i][j] = coef
                 coef *= GAMM * LAMB
