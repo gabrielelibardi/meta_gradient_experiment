@@ -149,8 +149,8 @@ class MetaPPO:
                         
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.meta_optimizer.step()
-                
                 self.meta_optimizer.zero_grad()
+                import ipdb; ipdb.set_trace()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
@@ -158,7 +158,6 @@ class MetaPPO:
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
 
-        import ipdb; ipdb.set_trace()
 
         return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
 
@@ -205,3 +204,4 @@ def ppo_save_model(actor_critic, fname, iter):
     torch.save(actor_critic.state_dict(), fname + ".tmp")
     os.rename(fname + '.tmp', fname)
     copy2(fname,fname+".{}".format(iter))
+

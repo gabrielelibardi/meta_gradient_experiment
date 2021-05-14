@@ -235,10 +235,12 @@ class RolloutStorage(object):
                 coef_mat[i][j] = coef
                 coef *= GAMM * LAMB
         
-        print(time.time()-start) 
+        # print(time.time()-start)
+
+        coef_mat = torch.from_numpy(coef_mat).to(return_batch.device)
+
         #dump_list([coef_mat.cpu().detach().numpy()], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
         dump_list([coef_mat], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
-        import ipdb; ipdb.set_trace()
         return (obs_batch, recurrent_hidden_states_batch, actions_batch, \
               return_batch, masks_batch, old_action_log_probs_batch, \
               value_preds_batch_ext, value_preds_batch_int, adv_targ, TD_batch, coef_mat)
@@ -246,3 +248,5 @@ class RolloutStorage(object):
     def mycallback(self, x):
         self.batches.append(x)
         print('LEN THERE', len(self.batches))
+
+
