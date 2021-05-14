@@ -92,6 +92,7 @@ class MetaPPO:
 
                 # Compute normal loss
                 loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
+                print("policy loss: {}".format(loss))
 
                 # Normal backward pass
                 loss.backward()
@@ -136,6 +137,7 @@ class MetaPPO:
                 # Compute meta loss
                 # The entropy is already accounted for in the other loss
                 meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss  # - dist_entropy * self.entropy_coef
+                print("meta loss: {}".format(meta_loss))
 
                 # Meta backward pass
                 meta_loss.backward()
@@ -155,6 +157,8 @@ class MetaPPO:
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
+
+        import ipdb; ipdb.set_trace()
 
         return value_loss, meta_value_loss, action_loss, meta_action_loss, loss, meta_loss
 
