@@ -54,7 +54,18 @@ class MetaPPO:
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
                 return_batch_ext, masks_batch, old_action_log_probs_batch, \
                 value_preds_batch_ext, value_preds_batch_int, adv_targ_ext, TD_batch, coef_mat = sample
-                
+
+                # SUMMARY VALUES
+                print()
+                print("summary obs {}".format(obs_batch.sum()))
+                print("summary act {}".format(actions_batch.sum()))
+                print("summary ext_ret {}".format(return_batch_ext.sum()))
+                print("summary old_action_log_prob {}".format(old_action_log_probs_batch.sum()))
+                print("summary adv_ext {}".format(adv_targ_ext.sum()))
+                print("summary TD {}".format(TD_batch.sum()))
+                print("summary coef matrix {}".format(coef_mat.sum()))
+                print()
+
                 # COMPUTE ADVANTAGES LIKE "SIMULATE GAE"
                 
                 rewards_int = self.actor_critic.predict_intrinsic_rewards(rollouts.obs[:-1].view(-1, *rollouts.obs.size()[2:]), rollouts.actions.view(-1, rollouts.actions.size(-1)))
