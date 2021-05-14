@@ -57,13 +57,13 @@ class MetaPPO:
 
                 # SUMMARY VALUES
                 print()
-                print("summary obs {}".format(obs_batch.sum()))
-                print("summary act {}".format(actions_batch.sum()))
-                print("summary ext_ret {}".format(return_batch_ext.sum()))
-                print("summary old_action_log_prob {}".format(old_action_log_probs_batch.sum()))
-                print("summary adv_ext {}".format(adv_targ_ext.sum()))
-                print("summary TD {}".format(TD_batch.sum()))
-                print("summary coef matrix {}".format(coef_mat.sum()))
+                print("summary obs {}, shape {}".format(obs_batch.sum()), obs_batch.shape)
+                print("summary act {}, shape {}".format(actions_batch.sum()), actions_batch.shape)
+                print("summary ext_ret {}, shape {}".format(return_batch_ext.sum()), return_batch_ext.shape)
+                print("summary old_action_log_prob {}, shape {}".format(old_action_log_probs_batch.sum()), old_action_log_probs_batch.shape)
+                print("summary adv_ext {}, shape {}".format(adv_targ_ext.sum()), adv_targ_ext.shape)
+                print("summary TD {}, shape {}".format(TD_batch.sum()), TD_batch.shape)
+                print("summary coef matrix {}, shape {}".format(coef_mat.sum()), coef_mat.shape)
                 print()
 
                 # COMPUTE ADVANTAGES LIKE "SIMULATE GAE"
