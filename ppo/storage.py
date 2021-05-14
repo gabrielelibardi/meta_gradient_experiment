@@ -1,8 +1,8 @@
-
+import time
 import multiprocessing
 import torch
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-
+import numpy as np
 
 def _flatten_helper(T, N, _tensor):
     return _tensor.view(T * N, *_tensor.size()[2:])
@@ -211,8 +211,8 @@ class RolloutStorage(object):
         masks = 1 - masks
         self.masks = torch.Tensor(masks).unsqueeze(-1)
         self.masks.to(adv_targ.device)
-        mini_batch_size
-        indices = inds.tolist()[0:mini_batch_size]
+
+        indices = inds[0:mini_batch_size]
         
         #####################################
         
@@ -220,19 +220,24 @@ class RolloutStorage(object):
         # COMPUTE COEF MATRIX
         GAMM = 0.99
         LAMB = 0.95
-        import time
-        start = time.time()
-        coef_mat = torch.zeros([mini_batch_size, batch_size]).to(return_batch.device)
         
+        #coef_mat = torch.zeros([mini_batch_size, batch_size]).to(return_batch.device)
+        coef_mat = np.zeros([mini_batch_size, batch_size], "float32")
+        
+        start = time.time()
         for i in range(mini_batch_size):
             coef = 1.0
             for j in range(indices[i], batch_size):
-                if j > indices[i] and (self.masks.view(-1, 1)[j] == 0.0 or j % num_steps == 0):
+                #if j > indices[i] and (self.masks.view(-1, 1)[j] == 0.0 or j % num_steps == 0):
+                if j > indices[i] and (not masks[j] or j % num_steps == 0):
                     break
+
                 coef_mat[i][j] = coef
                 coef *= GAMM * LAMB
+        
         print(time.time()-start) 
-        dump_list([coef_mat.cpu().detach().numpy()], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
+        #dump_list([coef_mat.cpu().detach().numpy()], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
+        dump_list([coef_mat], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
         import ipdb; ipdb.set_trace()
         return (obs_batch, recurrent_hidden_states_batch, actions_batch, \
               return_batch, masks_batch, old_action_log_probs_batch, \
