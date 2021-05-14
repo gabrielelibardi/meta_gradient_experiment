@@ -207,12 +207,23 @@ class RolloutStorage(object):
         
       
         items = loadall('/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data.dat')
-        obs, masks, actions, neglogpacs, r_ex, r_in, ret_ex, v_ex, v_mix, td_mix, inds =  items
+        obs, masks, actions, neglogpacs, r_ex, r_in, ret_ex, adv_ex, v_ex, v_mix, td_mix, inds =  items
         masks = 1 - masks
         self.masks = torch.Tensor(masks).unsqueeze(-1)
         self.masks.to(adv_targ.device)
+        adv_ex = ret_ex - v_ex 
 
         indices = inds[0:mini_batch_size]
+        actions_batch = torch.Tensor(actions[indices]).to(adv_targ.device)
+        obs_batch = torch.Tensor(obs[indices]).to(adv_targ.device)
+        masks_batch = torch.Tensor(masks[indices]).to(adv_targ.device)
+        return_batch = torch.Tensor(ret_ex[indices]).to(adv_targ.device)
+        old_action_log_probs_batch = torch.Tensor(neglogpacs[indices]).to(adv_targ.device)
+        value_preds_batch_ext = torch.Tensor(v_ex[indices]).to(adv_targ.device)
+        value_preds_batch_int = torch.Tensor(v_mix[indices]).to(adv_targ.device)
+        adv_targ =  torch.Tensor(adv_ex[indices]).to(adv_targ.device)
+        TD_batch = torch.Tensor(td_mix).to(adv_targ.device).unsqueeze(-1)
+        
         
         #####################################
         
@@ -236,11 +247,11 @@ class RolloutStorage(object):
                 coef *= GAMM * LAMB
         
         # print(time.time()-start)
-
+        dump_list([coef_mat], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
         coef_mat = torch.from_numpy(coef_mat).to(return_batch.device)
 
         #dump_list([coef_mat.cpu().detach().numpy()], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
-        dump_list([coef_mat], '/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data_out_2.dat')
+        
         return (obs_batch, recurrent_hidden_states_batch, actions_batch, \
               return_batch, masks_batch, old_action_log_probs_batch, \
               value_preds_batch_ext, value_preds_batch_int, adv_targ, TD_batch, coef_mat)

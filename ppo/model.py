@@ -116,6 +116,10 @@ class PolicyMLP(nn.Module):
         super(PolicyMLP, self).__init__()
 
         self.hidden_size = hidden_size
+        def init_weights(m):
+            if type(m) == nn.Linear:
+                m.weight.data.fill_(1.0)
+                m.bias.data.fill_(0.0)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
 
@@ -128,6 +132,10 @@ class PolicyMLP(nn.Module):
             init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        
+        self.actor.apply(init_weights)
+        self.critic.apply(init_weights)
+        self.critic_linear.apply(init_weights)
 
         self.train()
 
@@ -149,6 +157,11 @@ class MetaMLP(nn.Module):
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
         
+        def init_weights(m):
+            if type(m) == nn.Linear:
+                m.weight.data.fill_(1.0)
+                m.bias.data.fill_(0.0)
+        
         self.meta_reward = nn.Sequential(
             init_(nn.Linear(num_obs_inputs + num_act_inputs, hidden_size)), nn.Tanh(),
             init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh(),
@@ -158,8 +171,10 @@ class MetaMLP(nn.Module):
             init_(nn.Linear(num_obs_inputs, hidden_size)), nn.Tanh(),
             init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh(),
             init_(nn.Linear(hidden_size, 1)))
-
-        self.train()
+        
+        self.meta_reward.apply(init_weights)
+        self.meta_critic.apply(init_weights)
+        
 
     def predict_rewards(self, inputs, actions):
         return self.meta_reward(torch.cat([inputs, actions.float()], dim=-1))

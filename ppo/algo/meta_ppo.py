@@ -69,8 +69,7 @@ class MetaPPO:
                 # COMPUTE ADVANTAGES LIKE "SIMULATE GAE"
                 
                 rewards_int = self.actor_critic.predict_intrinsic_rewards(rollouts.obs[:-1].view(-1, *rollouts.obs.size()[2:]), rollouts.actions.view(-1, rollouts.actions.size(-1)))
-
-                #rewards_int = rollouts.rewards.view(-1,1)
+                print("summary coef matrix {}, shape {}".format(rewards_int.sum(), rewards_int.shape))
                 
                 delta = rewards_int + TD_batch                                                                           
                 adv_targ_int = torch.matmul(coef_mat, delta)
@@ -85,7 +84,9 @@ class MetaPPO:
 
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
-
+                
+                print("intrinsi value predictions: {}".format(values[0:5]))
+                
                 # Compute normal action loss
                 ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
                 surr1 = ratio * adv_targ_int
@@ -104,6 +105,10 @@ class MetaPPO:
                 # Compute normal loss
                 loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
                 print("policy loss: {}".format(loss))
+                print("intrinsi value loss: {}".format(value_loss))
+                print("action loss : {}".format(action_loss))
+                print("entropy : {}".format(dist_entropy))
+                
 
                 # Normal backward pass
                 loss.backward()
@@ -149,6 +154,7 @@ class MetaPPO:
                 # The entropy is already accounted for in the other loss
                 meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss  # - dist_entropy * self.entropy_coef
                 print("meta loss: {}".format(meta_loss))
+                print("meta value loss: {}".format(meta_value_loss))
 
                 # Meta backward pass
                 meta_loss.backward()
