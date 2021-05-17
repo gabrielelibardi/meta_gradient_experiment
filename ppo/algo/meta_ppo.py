@@ -69,7 +69,7 @@ class MetaPPO:
                 # COMPUTE ADVANTAGES LIKE "SIMULATE GAE"
                 
                 rewards_int = self.actor_critic.predict_intrinsic_rewards(rollouts.obs[:-1].view(-1, *rollouts.obs.size()[2:]), rollouts.actions.view(-1, rollouts.actions.size(-1)))
-                print("summary coef matrix {}, shape {}".format(rewards_int.sum(), rewards_int.shape))
+                print("summary int rewards prediction {}, shape {}".format(rewards_int.sum(), rewards_int))
                 
                 delta = rewards_int + TD_batch                                                                           
                 adv_targ_int = torch.matmul(coef_mat, delta)

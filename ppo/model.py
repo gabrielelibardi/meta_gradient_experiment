@@ -10,6 +10,11 @@ from ppo.distributions import Bernoulli, Categorical, DiagGaussian
 from ppo.utils import init
 
 
+def init_weights(m):
+    if type(m) == nn.Linear:
+        m.weight.data.fill_(1.0)
+        m.bias.data.fill_(0.0)
+
 class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.size(0), -1)
@@ -40,6 +45,7 @@ class MetaPolicy(nn.Module):
         else:
             raise NotImplementedError
 
+        self.dist.apply(init_weights)
         self.policy = nn.Sequential(self.base, self.dist)
 
         #######################################################################
@@ -116,10 +122,6 @@ class PolicyMLP(nn.Module):
         super(PolicyMLP, self).__init__()
 
         self.hidden_size = hidden_size
-        def init_weights(m):
-            if type(m) == nn.Linear:
-                m.weight.data.fill_(1.0)
-                m.bias.data.fill_(0.0)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
 
