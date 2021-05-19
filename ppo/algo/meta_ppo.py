@@ -118,11 +118,11 @@ class MetaPPO:
                     else:
                         assert not torch.isnan(param.grad.data).any()"""
                 
-                print(' Weights:', sum([torch.sum(para).item() for para in self.actor_critic.meta_net.parameters()]))    
+                print(' Weights:', sum([torch.sum(para).item() for para in self.actor_critic.policy.parameters()]))    
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
                 
-                print('Updated weights:', sum([torch.sum(para).item() for para in self.actor_critic.meta_net.parameters()]))
+                print('Updated weights:', sum([torch.sum(para).item() for para in self.policy.meta_net.parameters()]))
                 
                 self.optimizer.zero_grad()
 
