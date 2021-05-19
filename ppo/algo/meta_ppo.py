@@ -43,7 +43,6 @@ class MetaPPO:
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
-        
 
         for e in range(self.ppo_epoch):
 
@@ -70,6 +69,7 @@ class MetaPPO:
                 
                 rewards_int = self.actor_critic.predict_intrinsic_rewards(rollouts.obs[:-1].view(-1, *rollouts.obs.size()[2:]), rollouts.actions.view(-1, rollouts.actions.size(-1)))
                 print("summary int rewards prediction {}, values {}".format(rewards_int.sum(), rewards_int))
+                print('summary OBS ALL', torch.sum(rollouts.obs[:-1].view(-1, *rollouts.obs.size()[2:])))
                 
                 delta = rewards_int + TD_batch                                                                           
                 adv_targ_int = torch.matmul(coef_mat, delta)
@@ -117,9 +117,12 @@ class MetaPPO:
                         print('ATTENTION! None found')
                     else:
                         assert not torch.isnan(param.grad.data).any()"""
-                    
+                
+                print(' Weights:', sum([torch.sum(para).item() for para in self.actor_critic.meta_net.parameters()]))    
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
+                
+                print('Updated weights:', sum([torch.sum(para).item() for para in self.actor_critic.meta_net.parameters()]))
                 
                 self.optimizer.zero_grad()
 

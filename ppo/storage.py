@@ -223,6 +223,7 @@ class RolloutStorage(object):
         value_preds_batch_int = torch.Tensor(v_mix[indices]).to(adv_targ.device)
         adv_targ =  torch.Tensor(adv_ex[indices]).to(adv_targ.device)
         TD_batch = torch.Tensor(td_mix).to(adv_targ.device).unsqueeze(-1)
+        self.obs[:-1,0,:] = torch.Tensor(obs)
         
         
         #####################################
