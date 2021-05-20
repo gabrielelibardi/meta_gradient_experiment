@@ -99,7 +99,7 @@ class MetaPolicy(nn.Module):
 
         value, actor_features = self.base(inputs)
         dist = self.dist(actor_features)
-
+      
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
@@ -131,13 +131,14 @@ class PolicyMLP(nn.Module):
 
         self.critic = nn.Sequential(
             init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh(),
+            init_(nn.Linear(hidden_size, 1)))
 
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        #self.critic_linear = init_(nn.Linear(hidden_size, 1))
         
         self.actor.apply(init_weights)
         self.critic.apply(init_weights)
-        self.critic_linear.apply(init_weights)
+        #self.critic_linear.apply(init_weights)
 
         self.train()
 
@@ -150,7 +151,7 @@ class PolicyMLP(nn.Module):
         hidden_critic = self.critic(inputs)
         hidden_actor = self.actor(inputs)
 
-        return self.critic_linear(hidden_critic), hidden_actor
+        return hidden_critic, hidden_actor
 
 
 class MetaMLP(nn.Module):
@@ -183,4 +184,36 @@ class MetaMLP(nn.Module):
 
     def predict_values(self, inputs):
         return self.meta_critic(inputs)
+    
+    
+    
+class NewPolicyMLP(nn.Module):
+    def __init__(self, num_inputs, hidden_size=64):
+        super(NewPolicyMLP, self).__init__()
+
+        self.hidden_size = hidden_size
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
+        self.actor = nn.Sequential(
+            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
+            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+        
+        self.actor.apply(init_weights)
+        self.dist = dist = Categorical(hidden_size, 2)
+        self.train()
+
+    @property
+    def output_size(self):
+        return self.hidden_size
+
+    def evaluate_actions(self, inputs, action):
+
+        actor_features = self.actor(inputs)
+        
+        dist = self.dist(actor_features)
+        
+        action_log_probs = dist.log_probs(action)
+
+        return action_log_probs
 

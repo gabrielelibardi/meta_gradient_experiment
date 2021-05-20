@@ -109,10 +109,7 @@ class MetaPPO:
                 print("action loss : {}".format(action_loss))
                 print("entropy : {}".format(dist_entropy))
                 
-                import copy 
-                
-                old_state_dict = copy.deepcopy(self.actor_critic.policy.state_dict())
-                print('Old weights',  sum([torch.sum(old_state_dict[name]) for name in old_state_dict.keys()]))
+                old_state_dict = self.actor_critic.policy.state_dict()
                 # Normal backward pass
                 loss.backward()
                 
@@ -122,11 +119,12 @@ class MetaPPO:
                         print('ATTENTION! None found')
                     else:
                         assert not torch.isnan(param.grad.data).any()"""
-                
+                print('Weights actor before',sum([torch.sum(para.data) for para in self.actor_critic.base.actor.parameters()]))
                 print(' Weights:', sum([torch.sum(para.data).item() for para in self.actor_critic.policy.parameters()]))    
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
                 
+                print('Weights actor after',sum([torch.sum(para.data) for para in self.actor_critic.base.actor.parameters()]))
                 print('Updated weights:', sum([torch.sum(para.data).item() for para in self.actor_critic.policy.parameters()]))
                 
                 lr = 3e-4
@@ -135,23 +133,33 @@ class MetaPPO:
                 policy_params_new = {}
                 for params, params_name, opt_state in zip(self.actor_critic.policy.parameters(),                                                                           old_state_dict.keys(), self.optimizer.state_dict()['state'].keys()):
                     
-                    opt_step = self.optimizer.state_dict()['state'][opt_state]['step']
-                    beta1_power = torch.Tensor([beta1 ** opt_step]).to(params.device)
-                    beta2_power = torch.Tensor([beta2 ** opt_step]).to(params.device)
 
-                    lr_ = lr * torch.sqrt(1 - beta2_power) / (1 - beta1_power)
-                    m = self.optimizer.state_dict()['state'][opt_state]['exp_avg']
-                    v = self.optimizer.state_dict()['state'][opt_state]['exp_avg_sq']
-                    m = m + (params.grad - m) * (1 - .9)
-                    v = v + (torch.pow(params.grad.detach(), 2) - v) * (1 - .999)
-                    policy_params_new[params_name] = old_state_dict[params_name] - m * lr_ / (torch.sqrt(v) + 1E-5)
-                    
-                    
+                    if not ('critic' in params_name):
+                        opt_step = self.optimizer.state_dict()['state'][opt_state]['step']
+                        beta1_power = torch.Tensor([beta1 ** (opt_step+1)]).to(params.device)
+                        beta2_power = torch.Tensor([beta2 ** (opt_step+1)]).to(params.device)
+
+                        lr_ = lr * torch.sqrt(1 - beta2_power) / (1 - beta1_power)
+                        m = self.optimizer.state_dict()['state'][opt_state]['exp_avg']
+                        v = self.optimizer.state_dict()['state'][opt_state]['exp_avg_sq']
+                        m = m + (params.grad - m) * (1 - .9)
+                        v = v + (torch.pow(params.grad.detach(), 2) - v) * (1 - .999)
+                        if 'linear' in params_name:
+                            policy_params_new['.'.join(['dist']+params_name.split('.')[1:])] = old_state_dict[params_name] - m * lr_ /                               (torch.sqrt(v) + 1E-5)
+                        else:
+                            policy_params_new['.'.join(params_name.split('.')[1:])] = old_state_dict[params_name] - m * lr_ /                               (torch.sqrt(v) + 1E-5)
+                sum_grads = sum([torch.sum(para.grad) for para in self.actor_critic.base.actor.parameters()])
+                print('Sum grads', '{:.10f}'.format(sum_grads.item()))  
                 
-                print('Old weights',  sum([torch.sum(old_state_dict[name]) for name in old_state_dict.keys()]))
+                print('Old weights',  sum([torch.sum(old_state_dict[name]) for name in old_state_dict.keys() ]))
                 print('Manual weights:', sum([torch.sum(policy_params_new[name]) for name in policy_params_new.keys()]))
-                    
-                import ipdb; ipdb.set_trace()
+                
+                
+                from ppo.model import NewPolicyMLP
+                new_policy = NewPolicyMLP(4)
+                new_policy.load_state_dict(policy_params_new)
+                new_policy.to(obs_batch.device)
+                
 
                 self.optimizer.zero_grad()
 
@@ -162,13 +170,16 @@ class MetaPPO:
                 # META STUFF ##################################################
 
                 meta_values = self.actor_critic.get_extrinsic_value(obs_batch, recurrent_hidden_states_batch, masks_batch)
-
+                
+                #action_log_probs_new = new_policy.evaluate_actions(obs_batch,  actions_batch)
                 _, action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
-
+                
+                
 
                 # Compute meta action loss
                 ratio = torch.exp(action_log_probs_new - old_action_log_probs_batch)
+                print('ratio new',torch.sum(torch.exp(action_log_probs_new)), torch.sum(action_log_probs_new))
                 surr1 = ratio * adv_targ_ext
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_ext
                 meta_action_loss = - torch.min(surr1, surr2).mean()
