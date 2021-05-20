@@ -109,21 +109,50 @@ class MetaPPO:
                 print("action loss : {}".format(action_loss))
                 print("entropy : {}".format(dist_entropy))
                 
-
+                import copy 
+                
+                old_state_dict = copy.deepcopy(self.actor_critic.policy.state_dict())
+                print('Old weights',  sum([torch.sum(old_state_dict[name]) for name in old_state_dict.keys()]))
                 # Normal backward pass
                 loss.backward()
+                
+               
                 """for param in self.actor_critic.policy.parameters():
                     if param.grad is None:
                         print('ATTENTION! None found')
                     else:
                         assert not torch.isnan(param.grad.data).any()"""
                 
-                print(' Weights:', sum([torch.sum(para).item() for para in self.actor_critic.policy.parameters()]))    
+                print(' Weights:', sum([torch.sum(para.data).item() for para in self.actor_critic.policy.parameters()]))    
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
                 
-                print('Updated weights:', sum([torch.sum(para).item() for para in self.policy.meta_net.parameters()]))
+                print('Updated weights:', sum([torch.sum(para.data).item() for para in self.actor_critic.policy.parameters()]))
                 
+                lr = 3e-4
+                beta1 = 0.9
+                beta2 = 0.999
+                policy_params_new = {}
+                for params, params_name, opt_state in zip(self.actor_critic.policy.parameters(),                                                                           old_state_dict.keys(), self.optimizer.state_dict()['state'].keys()):
+                    
+                    opt_step = self.optimizer.state_dict()['state'][opt_state]['step']
+                    beta1_power = torch.Tensor([beta1 ** opt_step]).to(params.device)
+                    beta2_power = torch.Tensor([beta2 ** opt_step]).to(params.device)
+
+                    lr_ = lr * torch.sqrt(1 - beta2_power) / (1 - beta1_power)
+                    m = self.optimizer.state_dict()['state'][opt_state]['exp_avg']
+                    v = self.optimizer.state_dict()['state'][opt_state]['exp_avg_sq']
+                    m = m + (params.grad - m) * (1 - .9)
+                    v = v + (torch.pow(params.grad.detach(), 2) - v) * (1 - .999)
+                    policy_params_new[params_name] = old_state_dict[params_name] - m * lr_ / (torch.sqrt(v) + 1E-5)
+                    
+                    
+                
+                print('Old weights',  sum([torch.sum(old_state_dict[name]) for name in old_state_dict.keys()]))
+                print('Manual weights:', sum([torch.sum(policy_params_new[name]) for name in policy_params_new.keys()]))
+                    
+                import ipdb; ipdb.set_trace()
+
                 self.optimizer.zero_grad()
 
                 value_loss_epoch += value_loss.item()
@@ -158,6 +187,7 @@ class MetaPPO:
                 meta_loss = meta_value_loss * self.value_loss_coef + meta_action_loss  # - dist_entropy * self.entropy_coef
                 print("meta loss: {}".format(meta_loss))
                 print("meta value loss: {}".format(meta_value_loss))
+                print("meta action loss {}".format(meta_action_loss))
 
                 # Meta backward pass
                 meta_loss.backward()
