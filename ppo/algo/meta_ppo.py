@@ -69,11 +69,11 @@ class MetaPPO:
                 ###############################################################
                 
 
-                values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
+                values, neg_action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
                 # Compute normal action loss
-                ratio = torch.exp(action_log_probs - old_action_log_probs_batch)
+                ratio = torch.exp(old_action_log_probs_batch - neg_action_log_probs)
                 surr1 = ratio * adv_targ_int
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_int
                 action_loss = - torch.min(surr1, surr2).mean()
@@ -106,12 +106,12 @@ class MetaPPO:
 
                 meta_values = self.actor_critic.get_extrinsic_value(obs_batch, recurrent_hidden_states_batch, masks_batch)
 
-                _, action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
+                _, neg_action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
 
                 # Compute meta action loss
-                ratio = torch.exp(action_log_probs_new - old_action_log_probs_batch)
+                ratio = torch.exp(old_action_log_probs_batch - neg_action_log_probs_new)
                 surr1 = ratio * adv_targ_ext
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_ext
                 meta_action_loss = - torch.min(surr1, surr2).mean()
