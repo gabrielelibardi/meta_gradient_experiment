@@ -103,7 +103,7 @@ class MetaPolicy(nn.Module):
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action_log_probs, dist_entropy, dist
+        return value, -action_log_probs, dist_entropy, dist
 
     def actions_prob(self, inputs, rnn_hxs, masks, action):
 

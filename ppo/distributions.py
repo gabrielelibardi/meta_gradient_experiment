@@ -65,8 +65,8 @@ class Categorical(nn.Module):
 
     def forward(self, x):
         x = self.linear(x)
-        if x.shape[0] > 1:
-            import ipdb; ipdb.set_trace()
+        #if x.shape[0] > 1:
+        #    import ipdb; ipdb.set_trace()
         return FixedCategorical(logits=x)
 
 
