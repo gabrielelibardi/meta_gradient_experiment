@@ -209,7 +209,7 @@ class RolloutStorage(object):
         items = loadall('/workspace7/Unity3D/gabriele/Animal-AI/lirpg/RUNS/dummy_data.dat')
         obs, masks, actions, neglogpacs, r_ex, r_in, ret_ex, adv_ex, v_ex, v_mix, td_mix, inds =  items
         masks = 1 - masks
-        self.masks = torch.Tensor(masks).unsqueeze(-1)
+        self.masks[:-1,:,0] = torch.Tensor(masks).unsqueeze(-1)
         self.masks.to(adv_targ.device)
         adv_ex = ret_ex - v_ex 
 

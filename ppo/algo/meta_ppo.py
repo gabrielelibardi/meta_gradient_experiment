@@ -171,9 +171,9 @@ class MetaPPO:
 
                 meta_values = self.actor_critic.get_extrinsic_value(obs_batch, recurrent_hidden_states_batch, masks_batch)
                 
-                #action_log_probs_new = new_policy.evaluate_actions(obs_batch,  actions_batch)
+                neg_action_log_probs_new = new_policy.evaluate_actions(obs_batch,  actions_batch)
                 _, neg_action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
-                    obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
+                  obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
                 
                 
 
@@ -211,7 +211,8 @@ class MetaPPO:
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.meta_optimizer.step()
                 self.meta_optimizer.zero_grad()
-                import ipdb; ipdb.set_trace()
+        
+        import ipdb; ipdb.set_trace()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
