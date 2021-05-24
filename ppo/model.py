@@ -21,6 +21,9 @@ class MetaPolicy(nn.Module):
 
         obs_shape = input_space.shape
         act_shape = action_space.shape
+        
+        self.obs_shape = obs_shape
+        self.action_space = action_space
 
         #######################################################################
         #                              POLICY                                 #
@@ -50,9 +53,11 @@ class MetaPolicy(nn.Module):
             self.meta_net = MetaMLP(
                 obs_shape[0],
                 act_shape[0])
+
         except Exception:
             self.meta_net = MetaMLP(
                 obs_shape[0], 1)
+            
 
     @property
     def is_recurrent(self):
@@ -166,4 +171,47 @@ class MetaMLP(nn.Module):
 
     def predict_values(self, inputs):
         return self.meta_critic(inputs)
+    
+    
 
+class NewPolicyMLP(nn.Module):
+    def __init__(self, num_inputs, action_space, hidden_size=64):
+        super(NewPolicyMLP, self).__init__()
+
+        self.hidden_size = hidden_size
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
+        self.actor = nn.Sequential(
+            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
+            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+        
+        #self.dist = dist = Categorical(hidden_size, 2)
+        if action_space.__class__.__name__ == "Discrete":
+            num_outputs = action_space.n
+            self.dist = Categorical(hidden_size, num_outputs)
+        elif action_space.__class__.__name__ == "Box":
+            num_outputs = action_space.shape[0]
+            self.dist = DiagGaussian(hidden_size, num_outputs)
+        elif action_space.__class__.__name__ == "MultiBinary":
+            num_outputs = action_space.shape[0]
+            self.dist = Bernoulli(hidden_size, num_outputs)
+        else:
+            raise NotImplementedError
+        
+        
+        self.train()
+
+    @property
+    def output_size(self):
+        return self.hidden_size
+
+    def evaluate_actions(self, inputs, action):
+
+        actor_features = self.actor(inputs)
+        
+        dist = self.dist(actor_features)
+        
+        action_log_probs = dist.log_probs(action)
+
+        return -action_log_probs

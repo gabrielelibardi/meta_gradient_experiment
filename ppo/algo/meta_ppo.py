@@ -91,10 +91,41 @@ class MetaPPO:
                 loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
 
                 # Normal backward pass
+                old_state_dict = self.actor_critic.policy.state_dict()
+                
                 loss.backward()
                     
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
+                
+                lr = 3e-4
+                beta1 = 0.9
+                beta2 = 0.999
+                policy_params_new = {}
+                
+                for params, params_name, opt_state in zip(self.actor_critic.policy.parameters(),                                                                           old_state_dict.keys(), self.optimizer.state_dict()['state'].keys()):
+                    
+
+                    if not ('critic' in params_name):
+                        opt_step = self.optimizer.state_dict()['state'][opt_state]['step']
+                        beta1_power = torch.Tensor([beta1 ** (opt_step+1)]).to(params.device)
+                        beta2_power = torch.Tensor([beta2 ** (opt_step+1)]).to(params.device)
+
+                        lr_ = lr * torch.sqrt(1 - beta2_power) / (1 - beta1_power)
+                        m = self.optimizer.state_dict()['state'][opt_state]['exp_avg']
+                        v = self.optimizer.state_dict()['state'][opt_state]['exp_avg_sq']
+                        m = m + (params.grad - m) * (1 - .9)
+                        v = v + (torch.pow(params.grad.detach(), 2) - v) * (1 - .999)
+                        if 'fc' in params_name or 'logstd' in params_name:
+                            policy_params_new['.'.join(['dist']+params_name.split('.')[1:])] = old_state_dict[params_name] - m * lr_ /                               (torch.sqrt(v) + 1E-5)
+                        else:
+                            policy_params_new['.'.join(params_name.split('.')[1:])] = old_state_dict[params_name] - m * lr_ /                               (torch.sqrt(v) + 1E-5)
+                sum_grads = sum([torch.sum(para.grad) for para in self.actor_critic.base.actor.parameters()])
+        
+                from ppo.model import NewPolicyMLP
+                new_policy = NewPolicyMLP(self.actor_critic.obs_shape[0], self.actor_critic.action_space)
+                new_policy.load_state_dict(policy_params_new)
+                new_policy.to(obs_batch.device)
                 
                 self.optimizer.zero_grad()
 
@@ -105,9 +136,11 @@ class MetaPPO:
                 # META STUFF ##################################################
 
                 meta_values = self.actor_critic.get_extrinsic_value(obs_batch, recurrent_hidden_states_batch, masks_batch)
-
-                _, neg_action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
-                    obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
+                
+                
+                neg_action_log_probs_new = new_policy.evaluate_actions(obs_batch,  actions_batch)
+                #_, neg_action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
+                #    obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
 
 
                 # Compute meta action loss
