@@ -85,7 +85,7 @@ class MetaPolicy(nn.Module):
         dist_entropy = dist.entropy().mean()
         extrinsic_value = self.meta_net.predict_values(inputs)
 
-        return intrinsic_value, extrinsic_value, action, action_log_probs, rnn_hxs, dist_entropy
+        return intrinsic_value, extrinsic_value, action, -action_log_probs, rnn_hxs, dist_entropy
 
     def get_intrinsic_value(self, inputs, rnn_hxs, masks):
         value, _ = self.base(inputs)
