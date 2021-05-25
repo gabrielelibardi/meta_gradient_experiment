@@ -85,7 +85,7 @@ class MetaPPO:
                 values, neg_action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
                 
-                print("intrinsi value predictions: {}".format(values[0:5]))
+                print("intrinsi value predictions: {}".format(torch.sum(values)))
                 
                 # Compute normal action loss
                 ratio = torch.exp(old_action_log_probs_batch - neg_action_log_probs)
@@ -98,7 +98,15 @@ class MetaPPO:
                     value_pred_clipped = value_preds_batch_int + (values - value_preds_batch_int).clamp(-self.clip_param, self.clip_param)
                     value_losses = (values - return_batch_int).pow(2)
                     value_losses_clipped = (value_pred_clipped - return_batch_int).pow(2)
+                    print('CLIPPED VALUE LOSSES:',
+                    'value_loss_1', torch.sum(value_losses).item(),                                                                                 'value_loss_2',torch.sum(value_losses_clipped).item(), 
+                    'value_pred_clipped', torch.sum(value_pred_clipped).item(),
+                    'OLDVALUES', torch.sum(value_preds_batch_int).item(),
+                    'values', torch.sum(values).item(), 
+                    'return_batch', torch.sum(return_batch_int).item(), 
+                    'clipping term', torch.sum(values - value_preds_batch_int))
                     value_loss = 0.5 * torch.max(value_losses, value_losses_clipped).mean()
+
                 else:
                     value_loss = 0.5 * (return_batch_int - values).pow(2).mean()
 
@@ -180,9 +188,9 @@ class MetaPPO:
                 # Compute meta action loss
                 ratio = torch.exp(old_action_log_probs_batch - neg_action_log_probs_new)
                 print('ratio new',torch.sum(torch.exp(neg_action_log_probs_new)), torch.sum(neg_action_log_probs_new))
-                surr1 = ratio * adv_targ_ext
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_ext
-                meta_action_loss = - torch.min(surr1, surr2).mean()
+                surr1 = - ratio * adv_targ_ext
+                surr2 = - torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_ext
+                meta_action_loss = torch.max(surr1, surr2).mean()
 
                 # Compute meta value loss
                 if self.use_clipped_value_loss:
@@ -212,7 +220,7 @@ class MetaPPO:
                 self.meta_optimizer.step()
                 self.meta_optimizer.zero_grad()
         
-        import ipdb; ipdb.set_trace()
+                import ipdb; ipdb.set_trace()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
