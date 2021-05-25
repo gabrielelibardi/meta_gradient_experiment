@@ -214,14 +214,14 @@ class RolloutStorage(object):
         adv_ex = ret_ex - v_ex 
 
         indices = inds[0:mini_batch_size]
-        actions_batch = torch.Tensor(actions[indices]).to(adv_targ.device)
+        actions_batch = torch.Tensor(actions[indices]).to(adv_targ.device).unsqueeze(-1)
         obs_batch = torch.Tensor(obs[indices]).to(adv_targ.device)
-        masks_batch = torch.Tensor(masks[indices]).to(adv_targ.device)
-        return_batch = torch.Tensor(ret_ex[indices]).to(adv_targ.device)
-        old_action_log_probs_batch = torch.Tensor(neglogpacs[indices]).to(adv_targ.device)
-        value_preds_batch_ext = torch.Tensor(v_ex[indices]).to(adv_targ.device)
-        value_preds_batch_int = torch.Tensor(v_mix[indices]).to(adv_targ.device)
-        adv_targ =  torch.Tensor(adv_ex[indices]).to(adv_targ.device)
+        masks_batch = torch.Tensor(masks[indices]).to(adv_targ.device).unsqueeze(-1)
+        return_batch = torch.Tensor(ret_ex[indices]).to(adv_targ.device).unsqueeze(-1)
+        old_action_log_probs_batch = torch.Tensor(neglogpacs[indices]).to(adv_targ.device).unsqueeze(-1)
+        value_preds_batch_ext = torch.Tensor(v_ex[indices]).to(adv_targ.device).unsqueeze(-1)
+        value_preds_batch_int = torch.Tensor(v_mix[indices]).to(adv_targ.device).unsqueeze(-1)
+        adv_targ =  torch.Tensor(adv_ex[indices]).to(adv_targ.device).unsqueeze(-1)
         TD_batch = torch.Tensor(td_mix).to(adv_targ.device).unsqueeze(-1)
         self.obs[:-1,0,:] = torch.Tensor(obs)
         

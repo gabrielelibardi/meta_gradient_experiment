@@ -86,12 +86,13 @@ class MetaPPO:
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
                 
                 print("intrinsi value predictions: {}".format(torch.sum(values)))
+                print('NEG LOG PROBS', torch.sum(neg_action_log_probs))
                 
                 # Compute normal action loss
                 ratio = torch.exp(old_action_log_probs_batch - neg_action_log_probs)
-                surr1 = ratio * adv_targ_int
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_int
-                action_loss = - torch.min(surr1, surr2).mean()
+                surr1 = -ratio * adv_targ_int
+                surr2 = -torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_int
+                action_loss = torch.max(surr1, surr2).mean()
 
                 # Compute normal value loss
                 if self.use_clipped_value_loss:
@@ -162,7 +163,6 @@ class MetaPPO:
                 print('Old weights',  sum([torch.sum(old_state_dict[name]) for name in old_state_dict.keys() ]))
                 print('Manual weights:', sum([torch.sum(policy_params_new[name]) for name in policy_params_new.keys()]))
                 
-                
                 from ppo.model import NewPolicyMLP
                 new_policy = NewPolicyMLP(4)
                 new_policy.load_state_dict(policy_params_new)
@@ -180,16 +180,16 @@ class MetaPPO:
                 meta_values = self.actor_critic.get_extrinsic_value(obs_batch, recurrent_hidden_states_batch, masks_batch)
                 
                 neg_action_log_probs_new = new_policy.evaluate_actions(obs_batch,  actions_batch)
-                _, neg_action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
-                  obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
+                #_, neg_action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
+                #  obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
                 
                 
 
                 # Compute meta action loss
                 ratio = torch.exp(old_action_log_probs_batch - neg_action_log_probs_new)
                 print('ratio new',torch.sum(torch.exp(neg_action_log_probs_new)), torch.sum(neg_action_log_probs_new))
-                surr1 = - ratio * adv_targ_ext
-                surr2 = - torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_ext
+                surr1 = -ratio * adv_targ_ext
+                surr2 = -torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ_ext
                 meta_action_loss = torch.max(surr1, surr2).mean()
 
                 # Compute meta value loss
