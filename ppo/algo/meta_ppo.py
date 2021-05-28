@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from shutil import copy2
+from ppo.manual_adam import ADAMOptimizer
+import math
 
 
 class MetaPPO:
@@ -31,9 +33,14 @@ class MetaPPO:
 
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
+        self.optimizer_custom = ADAMOptimizer(self.actor_critic.policy.parameters(), lr=3e-4, eps=eps)
+        self.optimizer = optim.Adam(self.actor_critic.policy.parameters(), lr=3e-4, eps=eps)
+                                    
+        self.meta_optimizer = optim.Adam(self.actor_critic.meta_net.parameters(), lr=1e-4, eps=eps) # change this
+        
+        ## CREATE ALTERNATIVE OPTIMIZER STATE DICTIONARY ##
+        self.manual_adam_opt_dict = {}            
 
-        self.optimizer = optim.Adam(actor_critic.policy.parameters(), lr=3e-4, eps=eps)
-        self.meta_optimizer = optim.Adam(actor_critic.meta_net.parameters(), lr=1e-4, eps=eps)
 
     def update(self, rollouts):
         
@@ -91,43 +98,124 @@ class MetaPPO:
                 loss = value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef
 
                 # Normal backward pass
-                old_state_dict = self.actor_critic.policy.state_dict()
-                
+                from copy import deepcopy
+                old_state_dict = deepcopy(self.actor_critic.policy.state_dict())
+                print('Old weights',  sum([torch.sum(old_state_dict[name]) for name in old_state_dict.keys() if not ('critic' in                 name) ]))
                 loss.backward()
-                    
+                  
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
-                self.optimizer.step()
+                
+               
+                """self.optimizer.step()
+                print('Atomatic adam updated weights', 
+                      sum([torch.sum(self.actor_critic.policy.state_dict()[name]) for name in                                                              self.actor_critic.policy.state_dict().keys() if 'critic' not in name]))
+                
+                
+                self.actor_critic.policy.load_state_dict(old_state_dict)
+                print('Old weights',  sum([torch.sum(old_state_dict[name]) for name in old_state_dict.keys() if not ('critic' in                 name) ]))"""
+                
+                
+                self.optimizer_custom.step()
+                
+                
+                print('Custom updated weights', 
+                      sum([torch.sum(self.actor_critic.policy.state_dict()[name]) for name in                                                              self.actor_critic.policy.state_dict().keys() if 'critic' not in name]))
+                
+                #self.actor_critic.policy.load_state_dict(old_state_dict)
+                
+                print('Custom updated weights', 
+                      sum([torch.sum(self.actor_critic.policy.state_dict()[name]) for name in                                                              self.actor_critic.policy.state_dict().keys() if 'critic' not in name]))
+                
+                if not self.manual_adam_opt_dict:
+                    for opt_state_name in self.optimizer_custom.state_dict()['state'].keys():
+                        opt_state = self.optimizer_custom.state_dict()['state'][opt_state_name]
+                        self.manual_adam_opt_dict[opt_state_name] = {}
+                        self.manual_adam_opt_dict[opt_state_name]['step']= 1
+                        self.manual_adam_opt_dict[opt_state_name]['exp_avg']= torch.zeros_like(opt_state['exp_avg'])
+                        self.manual_adam_opt_dict[opt_state_name]['exp_avg_sq']= torch.zeros_like(opt_state['exp_avg_sq'])
+
                 
                 lr = 3e-4
                 beta1 = 0.9
-                beta2 = 0.999
-                policy_params_new = {}
+                beta2 = 0.99
+                policy_params_new = {} 
                 
-                for params, params_name, opt_state in zip(self.actor_critic.policy.parameters(),                                                                           old_state_dict.keys(), self.optimizer.state_dict()['state'].keys()):
-                    
+                for params, params_name, opt_state, opt_state_ in zip(self.actor_critic.policy.parameters(),                                                                           old_state_dict.keys(), self.manual_adam_opt_dict.keys(),                                                                         self.optimizer_custom.state_dict()['state'].keys()):
 
                     if not ('critic' in params_name):
-                        opt_step = self.optimizer.state_dict()['state'][opt_state]['step']
-                        beta1_power = torch.Tensor([beta1 ** (opt_step+1)]).to(params.device)
-                        beta2_power = torch.Tensor([beta2 ** (opt_step+1)]).to(params.device)
+                        opt_step = self.manual_adam_opt_dict[opt_state]['step']
+                        #beta1_power = torch.Tensor([beta1 ** (opt_step)]).to(params.device)
+                        #beta2_power = torch.Tensor([beta2 ** (opt_step)]).to(params.device)
+                        #print(opt_step, self.optimizer.state_dict()['state'][opt_state]['step'])
 
-                        lr_ = lr * torch.sqrt(1 - beta2_power) / (1 - beta1_power)
-                        m = self.optimizer.state_dict()['state'][opt_state]['exp_avg']
-                        v = self.optimizer.state_dict()['state'][opt_state]['exp_avg_sq']
-                        m = m + (params.grad - m) * (1 - .9)
-                        v = v + (torch.pow(params.grad.detach(), 2) - v) * (1 - .999)
+                        #lr_ = lr * torch.sqrt(1 - beta2_power) / (1 - beta1_power)
+                        m = self.manual_adam_opt_dict[opt_state]['exp_avg']
+                        v = self.manual_adam_opt_dict[opt_state]['exp_avg_sq']
+                        self.manual_adam_opt_dict[opt_state]['step'] +=1
+                        
+                        m_ = self.optimizer_custom.state_dict()['state'][opt_state]['exp_avg']
+                        v_ = self.optimizer_custom.state_dict()['state'][opt_state]['exp_avg_sq']
+                        
+                        print(torch.sum(m)- torch.sum(m_))
+                        print(torch.sum(v)- torch.sum(v_))
+                        #step = self.optimizer.state_dict()['state'][opt_state]['step']
+                        # Momentum
+                        #exp_avg = torch.mul(exp_avg, b1) + (1 - b1)*grad
+                        # RMS
+                        #exp_avg_sq = torch.mul(exp_avg_sq, b2) + (1-b2)*(grad*grad)
+                        #import ipdb; ipdb.set_trace()
+
+                        #print('{0:.16f}'.format(torch.sum(params.grad)))
+                        # grads are the same
+
+                        print(torch.sum(m)- torch.sum(m_))
+                        print(torch.sum(v)- torch.sum(v_))
+                        
+                        denom = v.sqrt() + 1e-5
+                        bias_correction1 = 1 / (1 - beta1 ** (self.manual_adam_opt_dict[opt_state]['step']+1) )
+                        bias_correction2 = 1 / (1 - beta2 ** (self.manual_adam_opt_dict[opt_state]['step']+1) )
+                        adapted_learning_rate = lr * bias_correction1 / math.sqrt(bias_correction2)
+                        
                         if 'fc' in params_name or 'logstd' in params_name:
-                            policy_params_new['.'.join(['dist']+params_name.split('.')[1:])] = old_state_dict[params_name] - m * lr_ /                               (torch.sqrt(v) + 1E-5)
+                            policy_params_new['.'.join(['dist']+params_name.split('.')[1:])] = old_state_dict[params_name] 
+                            - m * adapted_learning_rate/denom
+                            print(torch.sum(m * adapted_learning_rate/denom))
                         else:
-                            policy_params_new['.'.join(params_name.split('.')[1:])] = old_state_dict[params_name] - m * lr_ /                               (torch.sqrt(v) + 1E-5)
-                sum_grads = sum([torch.sum(para.grad) for para in self.actor_critic.base.actor.parameters()])
-        
+                            policy_params_new['.'.join(params_name.split('.')[1:])] = old_state_dict[params_name] - m *                                     adapted_learning_rate/denom
+                            print(torch.sum(m * adapted_learning_rate/denom))
+                        
+                        m = torch.mul(m, 0.9) + (params.grad) * (1 - 0.9)
+                        v = torch.mul(v, 0.99) + (params.grad*params.grad) * (1 - 0.99)
+                        
+                        self.manual_adam_opt_dict[opt_state]['exp_avg'] = m
+                        self.manual_adam_opt_dict[opt_state]['exp_avg_sq'] = v
+                        
+                        #print(torch.sum(m)- torch.sum(self.optimizer.state_dict()['state'][opt_state]['exp_avg']))
+                        #import ipdb; ipdb.set_trace()
+                            
+
                 from ppo.model import NewPolicyMLP
                 new_policy = NewPolicyMLP(self.actor_critic.obs_shape[0], self.actor_critic.action_space)
+                
                 new_policy.load_state_dict(policy_params_new)
                 new_policy.to(obs_batch.device)
                 
-                self.optimizer.zero_grad()
+                
+                print('Real Manually updated weights', 
+                      sum([torch.sum(policy_params_new[name]) for name in policy_params_new.keys()]))
+                
+                print('Manually updated weights', 
+                      sum([torch.sum(new_policy.state_dict()[name]) for name in new_policy.state_dict().keys()]))
+                
+
+                print('Last updated weights', 
+                      sum([torch.sum(self.actor_critic.policy.state_dict()[name]) for name in                                                              self.actor_critic.policy.state_dict().keys() if 'critic' not in name]))
+                
+                import ipdb; ipdb.set_trace()
+                
+                #import ipdb; ipdb.set_trace()
+                
+                self.optimizer_custom.zero_grad()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
@@ -139,8 +227,12 @@ class MetaPPO:
                 
                 
                 neg_action_log_probs_new = new_policy.evaluate_actions(obs_batch,  actions_batch)
-                #_, neg_action_log_probs_new, _, _ = self.actor_critic.evaluate_actions(
-                #    obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
+                _, neg_action_log_probs_new_, _, _ = self.actor_critic.evaluate_actions(
+                    obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
+                
+                print(
+                torch.sum(torch.exp(old_action_log_probs_batch - neg_action_log_probs_new)).item(),                     
+                torch.sum(torch.exp(old_action_log_probs_batch -  neg_action_log_probs_new_)).item() )
 
 
                 # Compute meta action loss

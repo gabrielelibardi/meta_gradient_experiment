@@ -212,6 +212,6 @@ class NewPolicyMLP(nn.Module):
         
         dist = self.dist(actor_features)
         
-        action_log_probs = dist.log_probs(action)
+        action_log_probs = - dist.log_probs(action)
 
-        return -action_log_probs
+        return action_log_probs
